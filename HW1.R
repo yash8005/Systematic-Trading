@@ -1,4 +1,8 @@
 #HW 1 Answer 1
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv')
 symbolList <- stock[,1]
 tradingDays <- as.data.frame(table(symbolList))
 maximumTradingDays <- max(tradingDays$Freq)
@@ -21,6 +25,10 @@ print("Top 10 Stocks with Lowest Annual Returns:")
 head(ans1,10)
 
 #HW 1 Answer 2
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv')
 sectorsTemp <- data.frame(sectors)
 sectorsTemp$annualreturns = NA
 for(symbol in sectorsTemp[,1]){
@@ -37,3 +45,14 @@ ans2$AnnualReturn <- round(ans2$AnnualReturn,1)
 ans2
 
 #HW 1 Answer 3 
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv')
+stocksMerged <- left_join(stock, sectors, by = c("symbol" = "symbol"))
+stocksMerged$month <- month(stocksMerged$date)
+stocksGroupbyMonth <- stocksMerged %>% 
+  group_by(sector, month) %>%
+    summarize(returns = ((last(close) - first(open)) / first(open))*100)
+ans3 <- spread(stocksGroupbyMonth, month, returns)
+ans3
