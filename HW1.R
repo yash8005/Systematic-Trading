@@ -56,3 +56,9 @@ stocksGroupbyMonth <- stocksMerged %>%
     summarize(returns = ((last(close) - first(open)) / first(open))*100)
 ans3 <- spread(stocksGroupbyMonth, month, returns)
 ans3
+
+#HW 1 Answer 4
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv')
