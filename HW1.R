@@ -62,3 +62,60 @@ current_path = rstudioapi::getActiveDocumentContext()$path
 setwd(dirname(current_path ))
 load('OHLC.RData')
 sectors<-read_csv(file = 'sectors.csv')
+appleData <- stock[stock$symbol=='AAPL',]
+appleData$dailyreturn <- ((appleData$close - appleData$open) / appleData$open)+1
+appleData$cumulativereturn <- cumprod(appleData$dailyreturn)
+appleData$maxcumulativereturn = cummax(appleData$cumulativereturn)
+
+p1 <- ggplot(appleData, aes(x = date, y = dailyreturn)) +
+  geom_line(color="orange") +
+  ggtitle("Daily Return")+
+  theme_economist() +
+  scale_y_continuous(limits = c(min(appleData$dailyreturn)-0.02, max(appleData$dailyreturn)+0.02), expand = c(0, 0))+
+  xlab("Date") +
+  ylab("Return") 
+
+p2 <- ggplot(appleData, aes(x = date, y = cumulativereturn)) +
+  geom_line(color="darkgreen") +
+  ggtitle("Cumulative Return") +
+  theme_economist() +
+  scale_y_continuous(limits = c(min(appleData$cumulativereturn)-0.1, max(appleData$cumulativereturn)+0.1), expand = c(0, 0))+
+  xlab("Date") +
+  ylab("Return") 
+
+p3 <- ggplot(appleData, aes(x = date, y = maxcumulativereturn)) +
+  geom_line(color="blue") +
+  ggtitle("Max Cumulative Return") +
+  theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                  panel.grid.minor = element_line(color = "gray", size = 0.25)) +
+  theme_economist()+
+  scale_y_continuous(limits = c(min(appleData$maxcumulativereturn)-0.1, max(appleData$maxcumulativereturn)+0.1), expand = c(0, 0))+
+  xlab("Date") +
+  ylab("Return") 
+
+
+# Create a line plot with multiple lines for each type of return
+p4 <- ggplot(appleData, aes(x = date)) +
+  geom_line(aes(y = cumulativereturn, group = 1, color = "Cumulative Return")) +
+  geom_line(aes(y = dailyreturn, group = 1, color = "Daily Return"), linewidth = 0.7) +
+  geom_line(aes(y = maxcumulativereturn, group = 1, color = "Max Cumulative Return"), linetype = "dashed") +
+  scale_y_continuous(name = "Cumulative return", limits = c(min(appleData$cumulativereturn)-0.2, max(appleData$cumulativereturn)+0.2), expand = c(0, 0))+
+  scale_color_manual(values = c("Cumulative Return" = "darkgreen", "Max Cumulative Return" = "blue", "Daily Return" = "orange")) +
+  theme_economist() +
+  ggtitle(paste0("Cumulative Return, Max Cumulative Return and Daily Return of ", "AAPL")) +
+  xlab("Date") +
+  ylab("Return")+
+  guides(color=guide_legend(title="Type of Return"))
+p1 <- p1 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+p2 <- p2 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+p3 <- p3 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+p4 <- p4 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+grid.arrange(p1, p2, p3, p4, ncol = 2)
