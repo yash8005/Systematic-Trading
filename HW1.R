@@ -169,7 +169,7 @@ p4 <- ggplot(appleData, aes(x = date)) +
   geom_line(aes(y = cumulativereturn, group = 1, color = "Cumulative Return")) +
   geom_line(aes(y = dailyreturn, group = 1, color = "Daily Return"), linewidth = 0.7) +
   geom_line(aes(y = maxcumulativereturn, group = 1, color = "Max Cumulative Return"), linetype = "dashed") +
-  scale_y_continuous(name = "Cumulative return", limits = c(min(appleData$cumulativereturn)-0.2, max(appleData$cumulativereturn)+0.2), expand = c(0, 0))+
+  scale_y_continuous(name = "Return", limits = c(min(appleData$cumulativereturn)-0.2, max(appleData$cumulativereturn)+0.2), expand = c(0, 0))+
   scale_color_manual(values = c("Cumulative Return" = "darkgreen", "Max Cumulative Return" = "blue", "Daily Return" = "orange")) +
   theme_economist() +
   ggtitle(paste0("Cumulative Return, Max Cumulative Return and Daily Return of ", "AAPL")) +

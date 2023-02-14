@@ -1,0 +1,478 @@
+# **TUTORIAL : DATA MANIPULATION AND TIME SERIES FOR S&P 500**
+
+**Installing Libraries**
+
+```{r}
+install.packages(c("xts","base","tidyverse","lubridate","zoo","quantmod","ggplot2","ggthemes","gridExtra"))
+
+```
+
+**Problem Statement:**
+
+Identify the top 10 stocks and bottom 10 stocks in terms of total annual return (open-to-close) for the entire year. Report each set of stocks separately, from highest to lowest (in terms of absolute value) return along with the value of the return itself, as a percentage to 1 decimal. Ignore all stocks in which the corresponding data begins after the first trading day of the year or ends prior to the last trading day of the year. Note that there are typically 252 trading days in a year.
+
+**Expected Learning:**
+
+1.  Importing Data: The data can be imported from various sources, such as CSV, Excel, or databases.
+
+2.  Cleaning Data: Missing values and duplicates can be handled to ensure the data is usable. Looping and
+
+3.  Automation: Using loops and functions to allow the user to easily analyze different years or datasets.
+
+4.  Calculating Returns: Calculating returns using the formula (close price - open price) / open price, and to perform calculations on entire data frames.
+
+5.  Ranking Stocks: Ranking stocks based on their total return using functions such as order, sort, or rank.
+
+6.  Subsetting Data: The ability to extract the top 10 and bottom 10 stocks from the ranked data, either using indexing or filtering functions.
+
+**Algorithm:**
+
+Sets working directory, installs packages, and loads data. Calculate the maximum number of trading days, and use it to filter the symbol list For loop created to calculate the open and close for each filtered symbols from the stock dataset, and compute the total annual return for each of them Present the top 10 stocks and bottom 10 stocks in terms of total annual return
+
+**Code Walkthrough:**
+
+Sets working directory, installs packages, and loads data.
+
+1.  library(tidyverse): The tidyverse is an opinionated collection of R packages designed for data science
+
+2.  library(lubridate): Lubridate makes it easier to do the things R does with date-times and possible to do the things R does not.
+
+```{r}
+#Loading libraries
+library(base)
+library(tidyverse)
+library(lubridate)
+#Setting environment
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path))
+rm(list=ls())
+
+#Loading Data
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv',show_col_types = FALSE)
+```
+
+Calculate the maximum number of trading days, and use it to filter the symbol list
+
+STEPS:
+
+1.  The symbol list is created by loading the first column from the stock data. This symbol list is converted into a dataframe.
+
+2.  We compute the maximum number of trading days by combining \$Freq and max. This chooses the maximum possible trading day in that year.
+
+3.  Finally, we filter the list of symbols by the maximum trading year, and only store those in the list which trade for the entire year.
+
+```{r}
+symbolList <- stock[,1]
+tradingDays <- as.data.frame(table(symbolList))
+maximumTradingDays <- max(tradingDays$Freq)
+print(maximumTradingDays)
+#List containing all symbols that have traded throughout the year
+symbolList <- tradingDays[tradingDays$Freq == maximumTradingDays,1]
+```
+
+For loop created to calculate the open and close for each filtered symbols from the stock dataset, and compute the total annual return for each of them
+
+STEPS:
+
+1.  We create a new column, named annual return, which will store the annual return for each symbol. We rename the symbol column as "Symbol"
+
+2.  The for loop iterates through the symbolList, and computes the open and close values for each symbol. This is done using the head and tail function, where we extract the columns from the stock dataset.
+
+3.  We use the annual return formula to calculate the annual return for each symbol, and set it equal to the annual return of that symbol.
+
+```{r}
+#Creating dataframe for answer
+ans1 <- data.frame(symbolList)
+ans1$annualreturns = NA
+colnames(ans1)[1] = "Symbol"
+colnames(ans1)[2] = "AnnualReturn"
+
+#Calculating annual return by traversing symbol list
+for(symbol in symbolList){
+    open = head(stock[stock$symbol == symbol,3],1)
+    close = tail(stock[stock$symbol == symbol,6],1)
+    ans1$AnnualReturn[ans1$Symbol==symbol]<-round(((close-open)/open)*100,1)
+}
+```
+
+Present the top 10 stocks and bottom 10 stocks in terms of total annual return
+
+STEPS:
+
+1.  We order the stocks based on annualReturn using the order function
+
+2.  The top 10 stocks and bottom 10 stocks are shown using the head/tail functions respectively
+
+```{r}
+ans1<-ans1[order(ans1$AnnualReturn),]
+print("Top 10 Stocks with Highest Annual Returns:")
+#Reason to save time by not needing to sort dataframe in reverse order and fetching top 10
+tail(ans1,10)[seq(dim(tail(ans1,10))[1],1),]
+print("Top 10 Stocks with Lowest Annual Returns:")
+head(ans1,10)
+
+```
+
+**Problem Statement:**
+
+Report the average annual return, across stocks for each financial sector. Use the same reporting style as per question 1.
+
+**Expected Learning:**
+
+1.  Transforming Data: Operations like aggregations and filtering will be performed to convert raw data into a format suitable for analysis.
+
+2.  Averaging Returns: The average return for each sector can be calculated using functions such as mean or aggregate.
+
+**Algorithm:**
+
+1.  Sets working directory, installs packages, and loads data.
+
+2.  Create a list of symbols that are filtered according to the maximum number of trading days, and compute annual returns for symbols in that list
+
+3.  Compute the average annual return for each sector, using the aggregate function which computes the mean
+
+**Code Walkthrough:**
+
+Sets working directory, installs packages, and loads data.
+
+STEPS:
+
+1.  library(tidyverse): The tidyverse is an opinionated collection of R packages designed for data science
+
+2.  library(lubridate): Lubridate makes it easier to do the things R does with date-times and possible to do the things R does not.
+
+    ```{r}
+    library(base)
+    library(tidyverse)
+    library(lubridate)
+    current_path = rstudioapi::getActiveDocumentContext()$path 
+    setwd(dirname(current_path ))
+    rm(list=ls())
+
+    load('OHLC.RData')
+    sectors<-read_csv(file = 'sectors.csv',show_col_types = FALSE)
+    ```
+
+Create a list of symbols that are filtered according to the maximum number of trading days, and compute annual returns for symbols in that list
+
+STEPS:
+
+1.  Create a list of symbols from the stock dataset. Retrieve the maximum number of trading days using the \$freq function. Store only the symbols that are traded throughout the entire year.
+
+2.  Using a for loop, we iterate through all the sectors. If the symbol in sectors are present in symbolList, which stores whole year trading data, we compute the annual return. This is done through obtaining the open and close values. We can check if the symbol in sectors are present in the whole year trading data list using the %in% operator.
+
+    ```{r}
+    symbolList <- stock[,1]
+    tradingDays <- as.data.frame(table(symbolList))
+    maximumTradingDays <- max(tradingDays$Freq)
+    symbolList <- tradingDays[tradingDays$Freq == maximumTradingDays,1]
+    sectorsTemp <- data.frame(sectors)
+    sectorsTemp$annualreturns = NA
+
+    #Traversing sectorList to store annual return for each ticker
+    for(symbol in sectorsTemp[,1]){
+      if(symbol %in% symbolList){
+      open = head(stock[stock$symbol == symbol,3],1)
+      close = tail(stock[stock$symbol == symbol,6],1)
+      sectorsTemp$annualreturns[sectorsTemp$symbol==symbol]<-round(((close-open)/open)*100,1)
+      }
+    }
+    ```
+
+Compute the average annual return for each sector, using the aggregate function which computes the mean
+
+STEPS:
+
+1.  Using the  aggregate function, we are able to compute an average value for the annual returns by specific sectors. Na.rm = TRUE instructs the program to drop values which are NULL.
+
+2.  We round up the average values for the annual returns, and we order them from the highest to lowest. We perform this using round and order respectively.
+
+```{r}
+#Aggregating by sector
+ans2 <- aggregate(sectorsTemp$annualreturns, list(sectorsTemp$sector),FUN=mean, na.rm = TRUE)
+
+colnames(ans2)[1] = "Sector"
+colnames(ans2)[2] = "AnnualReturn"
+ans2$AnnualReturn <- round(ans2$AnnualReturn,1)
+ans2<-ans2[order(-ans2$AnnualReturn),]
+ans2
+```
+
+**Problem Statement:**
+
+Create a matrix or average returns by sector (rows) and month (columns). Use open- to-close for the monthly returns of each stock. Sort rows alphabetically by sector.
+
+**Expected Learnings:**
+
+1.  Monthly Return Calculation: The monthly returns for each stock will be calculated based on the open and close prices for each trading day within the month.
+
+2.  Time Series Analysis: Create time series objects for daily data and calculate monthly returns using the quantmod package in R.
+
+3.  Matrix Creation: A matrix will be created with sectors as rows and months as columns, and filled with the average returns for each sector and month.
+
+4.  Adding Column and Row Labels: Adding labels to the rows and columns, to clearly identify the sectors and months.
+
+**Algorithm:**
+
+1.  Sets working directory, installs packages, and loads data.
+
+2.  Filtering for valid data under the assumption that average returns will only be calculated for stocks that are traded for the maximum amount of days (250)
+
+3.  Loop created to go through each stock by creating a time series to store with sector details to calculate the average monthly returns per stock.
+
+4.  Aggregate data for monthly returns per sector and format data and place it into a matrix.
+
+**Code Walkthrough:**
+
+Sets working directory, installs packages, and loads data.
+
+1.  library(quantmod): Quantitative Financial Modelling and Trading Framework package that assists in downloading and charting stock data.
+
+2.  library(xts): Time series package to create a new data frame of the symbol's open, high, low, close and volume data.
+
+```{r}
+library(base)
+library(tidyverse)
+library(lubridate)
+library(zoo)
+library(xts)
+library(quantmod)
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+rm(list=ls())
+
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv',show_col_types = FALSE)
+```
+
+Filtering for valid data under the assumption that average returns will only be calculated for stocks that are traded for the maximum amount of days (250)
+
+STEPS:
+
+1.  Creating a list with just the first column from the stock data and converting it to a data frame.
+
+2.  Calculates the maximum frequency of trading days and filters for 250 trading days using the max function of the frequency of occurrence of a particular stock.
+
+3.  Filters stock AND sector data frame for stocks that show up in symbol list which have 250 trading days. %in% operator is used to figure out if value exists in the data frame and is displayed in the new data frame if true. These are the values that are going to be used to calculate the average returns.
+
+```{r}
+symbolList <- stock[,1]
+tradingDays <- as.data.frame(table(symbolList))
+maximumTradingDays <- max(tradingDays$Freq)
+symbolList <- tradingDays[tradingDays$Freq == maximumTradingDays,1]
+stockFiltered <- stock[stock$symbol %in% symbolList, ]
+
+sectorsFiltered <- data.frame(sectors)
+sectorsFiltered <- sectorsFiltered[sectorsFiltered$symbol %in% symbolList, ]
+months <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+```
+
+For loop created to calculate the average monthly returns per stock.
+
+STEPS:
+
+1.  For loop initialized for every row of sectors filtered data
+
+2.  Resets variable for symbol by looping through each row
+
+3.  Creates a data frame for the current stock in the loop
+
+4.  Using the xts class for a time series package to create a new data frame of the symbol's open, high, low, close and volume data and sort by date in ascending order.
+
+5.  Given a set of prices, return periodic returns using the monthlyReturn function
+
+6.  Pastes the values of each month return from Jan-December (names columns) and pastes in a vectorized way because paste0 is used.
+
+```{r}
+#Looping through each symbol
+for (i in 1:nrow(sectorsFiltered)) {
+  symbol <- sectorsFiltered[i, "symbol"]
+  #Fetching yearly data for current symbol
+  symbolData <- stockFiltered[stockFiltered$symbol== symbol, ]
+  #Creating Time Series Object of OHLCV
+  symbolXts <- xts(symbolData[,3:7],order.by=as.Date(symbolData$date))
+  # Calculate the monthly returns
+  symbolMonthlyReturns <- monthlyReturn(symbolXts, type="arithmetic")
+  sectorsFiltered[i, paste0(months, "_Return")] <- as.vector(symbolMonthlyReturns)
+}
+```
+
+Formats data and places it into a matrix
+
+STEPS:
+
+1.  Creates a data frame for MEAN aggregation of monthly returns by sectors and rounds answers to 4 decimal places.
+
+2.  Convert from a data frame to a matrix.
+
+3.  Print matrix for user view.
+
+```{r}
+#Aggregating Monthly Return by Sector
+ans3 <- aggregate(sectorsFiltered[, paste0(months, "_Return")], by = list(sectorsFiltered$sector), FUN = mean)
+
+#Manipulating dataframe and creating a matrix for output
+ans3[, 2:13] <- round(ans3[, 2:13] * 100, 4)
+colnames(ans3)[2:13] <- paste0(months, "_Return")
+ans3$sector <- as.factor(ans3$Group.1)
+ans3 <- ans3[, c("sector", paste0(months, "_Return"))]
+row.names(ans3) <- ans3[, 1]
+ans3Matrix <- as.matrix(ans3[, -1])
+colnames(ans3Matrix) <- colnames(ans3[, -1])
+
+ans3Matrix
+```
+
+**Problem Statement:**
+
+Now, let's assume you would like to know the daily and cumulative returns that would arise if you had day traded Apple stock. Assume you purchase one share every day at the open and sell that same share at the close. Plot the daily return and cumulative return for the entire year. In addition, keep track of and plot the maximum cumulative return achieved through each trading day. So let say the daily return on the first day is 0.9875 (relative to 1.00 so this is a loser day), then the cumulative return is also 0.9875 and so too is the maximum return. Now on the second day, let's say the daily return is 1.0258. Then the cumulative return is 0.9875\*1.0258 = 1.013 (with a little rounding). Now the maximum cumulative return is also 1.013 since it is greater than 0.9875. Note that if the daily return is less than 1, then the cumulative return will be the same as the prior trading day. In addition to the plot, be sure to provide an explanation of what information this cumulative maximum return provides and how it might be useful in evaluating a trading strategy.
+
+**Expected Learning:**
+
+1.  Cumulative Return Calculation: The cumulative return will be calculated by multiplying the daily returns from each trading day.
+
+2.  Maximum Cumulative Return: The maximum cumulative return achieved through each trading day will be kept track of and plotted.
+
+3.  Plotting Daily and Cumulative Returns: The daily and cumulative returns will be plotted to visually display the results.
+
+**Algorithm:**
+
+1.  Establish a working directory and install various packages to format data frames in a graphical representation.
+
+2.  Calculate daily, cumulative, and maximum cumulative returns for all of the Apple stock data.
+
+3.  Graph the plots of all returns using the ggplot2 and ggthemes packages.
+
+4.  Aggregate all plots onto one graph
+
+5.  Create a graphical representation using the gridExtra package to have 4 graphs on one display.
+
+**Code Walkthrough:**
+
+Sets working directory, installs packages, and loads data.
+
+1.  library(ggplot2): Allows to create graphics from data and format the aesthetics of a graph.
+
+2.  library(ggthemes): This package contains extra themes, scales, and geoms, and functions for and related to ggplot2.
+
+3.  library(gridExtra): Provides a number of user-level functions to work with "grid" graphics, notably to arrange multiple grid-based plots on a page, and draw tables.
+
+```{r}
+library(base)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+rm(list=ls())
+
+load('OHLC.RData')
+sectors<-read_csv(file = 'sectors.csv',show_col_types = FALSE)
+```
+
+Create a data frame of Apple stock and then calculate the daily return, cumulative return, and maximum cumulative return and create columns of the following values.
+
+```{r}
+#Filtering Data for ticker AAPL
+appleData <- stock[stock$symbol=='AAPL',]
+#Calculating Daily, Cumulative and Max Cumulative Return
+appleData$dailyreturn <- ((appleData$close - appleData$open) / appleData$open)+1
+appleData$cumulativereturn <- cumprod(appleData$dailyreturn)
+appleData$maxcumulativereturn = cummax(appleData$cumulativereturn)
+```
+
+Creates individual plots for daily return, cumulative return, and maximum cumulative return.
+
+STEPS:\
+1) Uses ggplot to declare the input data from a data frame into a graphic.
+
+2)  Aesthetic mappings describe how variables in the data are mapped to visual properties using aes.
+
+-   X and Y values are set by specific columns from appleData data frame
+
+-   Geom_line connects values in order of the variable on the x axis
+
+-   Ggtitle adds title to plot
+
+-   theme_economist = A theme that approximates the style of The Economist.
+
+-   Scale_y\_continuous = sets the upper and lower limits of the y axis.
+
+-   Xlab and ylab set labels for the axes.
+
+```{r}
+#Plot for Daily Return
+p1 <- ggplot(appleData, aes(x = date, y = dailyreturn)) +
+  geom_line(color="orange") +
+  ggtitle("Daily Return")+
+  theme_economist() +
+  scale_y_continuous(limits = c(min(appleData$dailyreturn)-0.02, max(appleData$dailyreturn)+0.02), expand = c(0, 0))+
+  xlab("Date") +
+  ylab("Return") 
+
+#Plot for Cumulative Return
+p2 <- ggplot(appleData, aes(x = date, y = cumulativereturn)) +
+  geom_line(color="darkgreen") +
+  ggtitle("Cumulative Return") +
+  theme_economist() +
+  scale_y_continuous(limits = c(min(appleData$cumulativereturn)-0.1, max(appleData$cumulativereturn)+0.1), expand = c(0, 0))+
+  xlab("Date") +
+  ylab("Return") 
+
+#Plot for maximum Cumulative Return
+p3 <- ggplot(appleData, aes(x = date, y = maxcumulativereturn)) +
+  geom_line(color="blue") +
+  ggtitle("Max Cumulative Return") +
+  theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                  panel.grid.minor = element_line(color = "gray", size = 0.25)) +
+  theme_economist()+
+  scale_y_continuous(limits = c(min(appleData$maxcumulativereturn)-0.1, max(appleData$maxcumulativereturn)+0.1), expand = c(0, 0))+
+  xlab("Date") +
+  ylab("Return") 
+```
+
+Creates a cumulative plot of all 3 returns.
+
+```{r}
+p4 <- ggplot(appleData, aes(x = date)) +
+  geom_line(aes(y = cumulativereturn, group = 1, color = "Cumulative Return")) +
+  geom_line(aes(y = dailyreturn, group = 1, color = "Daily Return"), linewidth = 0.7) +
+  geom_line(aes(y = maxcumulativereturn, group = 1, color = "Max Cumulative Return"), linetype = "dashed") +
+  scale_y_continuous(name = "Return", limits = c(min(appleData$cumulativereturn)-0.2, max(appleData$cumulativereturn)+0.2), expand = c(0, 0))+
+  scale_color_manual(values = c("Cumulative Return" = "darkgreen", "Max Cumulative Return" = "blue", "Daily Return" = "orange")) +
+  theme_economist() +
+  ggtitle(paste0("Cumulative Return, Max Cumulative Return and Daily Return of ", "AAPL")) +
+  xlab("Date") +
+  ylab("Return")+
+  guides(color=guide_legend(title="Type of Return"))
+```
+
+Further formats the grid of each plot and implement the grid.arrange function to display all 4 plots on one screen.
+
+```{r}
+#Adding Grid Lines to plot for better visualization
+p1 <- p1 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+p2 <- p2 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+p3 <- p3 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+p4 <- p4 + theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+                 panel.grid.minor = element_line(color = "gray", size = 0.25),
+                 plot.title = element_text(size = 12))
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+
+**Insights:**
+
+The highest possible return that might have been attained over a series of trades is known as the cumulative maximum return. This information might be helpful in assessing a trading strategy because it sheds light on the top bound of possible returns.
+
+It can also be used as a risk assessment tool to visualize the worst drawdown that could result from failing to quit the market at the appropriate time. Though not the case in the aforementioned example, generally speaking, when there is a significant discrepancy between the cumulative return and the maximum cumulative return, we should reevaluate and alter our trading strategy.
+
+\
