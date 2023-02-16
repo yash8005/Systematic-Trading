@@ -13,7 +13,7 @@ Quandl.api_key('EfNYF1EymebW8saMFp5B')
 symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
 symbols <- unique(symbols)
 fromdate=as.Date("2018-02-01")
-if(!file.exists('universe.rdata')){
+if(!file.exists('SPUuniverse.rdata')){
 firsttime<-TRUE
 for (currsymbol in symbols) {
   print(c(currsymbol))
@@ -50,12 +50,17 @@ temp<-temp[order(temp$symbol,temp$date),]
 stock<-temp[,c(1:9)]
 
 rownames(stock)<-seq(1,nrow(stock),1)
-save(stock,file="universe.rdata")
+save(stock,file="SPUniverse.rdata")
 }
-#ANS 1
-library(c('tidyverse','dplyr'))
 
-load('universe.rdata')
+#ANS 1
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+library(c('tidyverse','dplyr'))
+symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
+symbols <- unique(symbols)
+fromdate=as.Date("2018-02-01")
+load('SPUniverse.rdata')
 
 if(file.exists("insiderTradingEQ.rdata")){
   load('insiderTradingEQ.rdata')
@@ -110,6 +115,56 @@ stock <- merge(x=stock,y=insiderTradingRSU, by.x=c("symbol","date"),
 save(stock,file="universeWithInsider.rdata")
 
 
+#ANS 2
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+library(tidyverse,dplyr,Quandl)
+symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
+symbols <- unique(symbols)
+fromdate=as.Date("2018-02-01")
+load('SPUniverseWithInsider.rdata')
 
+firsttime<-TRUE
+for (currsymbol in symbols) {
+    print(c(currsymbol))
+    temp<-tryCatch({
+      temp<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=currsymbol)  
+    }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+    if (!is.null(temp)) {
+      if (firsttime) {
+        stockDaily<-temp
+      } else {
+        stockDaily<-rbind(stockDaily,temp)}
+      firsttime<-FALSE
+    }
+  }
 
+save(stockDaily,file="stockDailyFundamental.rdata")
 
+stock <- merge(x=stock,y=stockDaily, by.x=c("symbol","date"), 
+               by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+
+save(stock,file="SPuniverseWithInsiderFundamental.rdata")
+
+load('SPuniverseWithInsiderFundamental.rdata')
+firsttime<-TRUE
+for (currsymbol in symbols) {
+  print(c(currsymbol))
+  temp<-tryCatch({
+    temp<-Quandl.datatable("SHARADAR/ACTIONS", date.gte=fromdate,ticker=currsymbol,action='dividend')  
+  }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+  if (!is.null(temp)) {
+    if (firsttime) {
+      stockCorporateActions<-temp
+    } else {
+      stockCorporateActions<-rbind(stockCorporateActions,temp)}
+    firsttime<-FALSE
+  }
+}
+
+stockCorporateActions <- stockCorporateActions[-c(2,4,6,7)]
+colnames(stockCorporateActions)[3] <- "dividendValue"
+stock <- merge(x=stock,y=stockCorporateActions, by.x=c("symbol","date"), 
+               by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+
+save(stock,file="SPUniverseWithInsiderFundamentalDividend.rdata")
