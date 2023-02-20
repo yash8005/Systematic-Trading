@@ -13,50 +13,54 @@ Quandl.api_key('EfNYF1EymebW8saMFp5B')
 symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
 symbols <- unique(symbols)
 fromdate=as.Date("2018-02-01")
-if(!file.exists('SPUuniverse.rdata')){
-firsttime<-TRUE
-for (currsymbol in symbols) {
-  print(c(currsymbol))
-  temp<-tryCatch({
-    temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker=currsymbol)  
-  }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
-  if (!is.null(temp)) {
-    if (firsttime) {
-      stock<-temp
-    } else {
-      stock<-rbind(stock,temp)}
-    firsttime<-FALSE
+if(!file.exists('SPUniverse.rdata')){
+  firsttime<-TRUE
+  for (currsymbol in symbols) {
+    print(c(currsymbol))
+    temp<-tryCatch({
+      temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker=currsymbol)  
+    }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+    if (!is.null(temp)) {
+      if (firsttime) {
+        stock<-temp
+      } else {
+        stock<-rbind(stock,temp)}
+      firsttime<-FALSE
+    }
   }
-}
 
-names(stock)[1]<-"symbol"
-
-# Get rid of of data prior to date stock is added to the S&P 500
-
-add<-read.csv("SP additions.csv")
-add$date.added<-as.Date(add$date.added,format="%m/%d/%Y")
-temp<-merge(stock,add,all.x=TRUE)
-temp$date.added<-as.Date(ifelse(is.na(temp$date.added),as.Date("2000-12-31"),temp$date.added))
-temp<-subset(temp,temp$date>=temp$date.added)
-
-# Get rid of data after stock is removed from the S&P 500
-
-remove<-read.csv("SP removals.csv")
-remove$date.removed<-as.Date(remove$date.removed,format="%m/%d/%Y")
-temp<-merge(temp,remove,all.x=TRUE)
-temp$date.removed<-as.Date(ifelse(is.na(temp$date.removed),as.Date("2100-12-31"),temp$date.removed))
-temp<-subset(temp,temp$date<temp$date.removed)
-temp<-temp[order(temp$symbol,temp$date),]
-stock<-temp[,c(1:9)]
-
-rownames(stock)<-seq(1,nrow(stock),1)
-save(stock,file="SPUniverse.rdata")
+  names(stock)[1]<-"symbol"
+  
+  # Get rid of of data prior to date stock is added to the S&P 500
+  
+  add<-read.csv("SP additions.csv")
+  add$date.added<-as.Date(add$date.added,format="%m/%d/%Y")
+  temp<-merge(stock,add,all.x=TRUE)
+  temp$date.added<-as.Date(ifelse(is.na(temp$date.added),as.Date("2000-12-31"),temp$date.added))
+  temp<-subset(temp,temp$date>=temp$date.added)
+  
+  # Get rid of data after stock is removed from the S&P 500
+  
+  remove<-read.csv("SP removals.csv")
+  remove$date.removed<-as.Date(remove$date.removed,format="%m/%d/%Y")
+  temp<-merge(temp,remove,all.x=TRUE)
+  temp$date.removed<-as.Date(ifelse(is.na(temp$date.removed),as.Date("2100-12-31"),temp$date.removed))
+  temp<-subset(temp,temp$date<temp$date.removed)
+  temp<-temp[order(temp$symbol,temp$date),]
+  stock<-temp[,c(1:9)]
+  
+  rownames(stock)<-seq(1,nrow(stock),1)
+  save(stock,file="SPUniverse.rdata")
+} else {
+    load('SPUniverse.rdata')
 }
 
 #ANS 1
 current_path = rstudioapi::getActiveDocumentContext()$path 
 setwd(dirname(current_path ))
-library(c('tidyverse','dplyr'))
+
+library('tidyverse')
+library('dplyr')
 symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
 symbols <- unique(symbols)
 fromdate=as.Date("2018-02-01")
@@ -112,7 +116,7 @@ stock <- merge(x=stock,y=insiderTradingEQ, by.x=c("symbol","date"),
 stock <- merge(x=stock,y=insiderTradingRSU, by.x=c("symbol","date"), 
                by.y=c("ticker","transactiondate"),all.x=TRUE)
 
-save(stock,file="universeWithInsider.rdata")
+save(stock,file="SPUniverseWithInsider.rdata")
 
 
 #ANS 2
@@ -124,22 +128,26 @@ symbols <- unique(symbols)
 fromdate=as.Date("2018-02-01")
 load('SPUniverseWithInsider.rdata')
 
-firsttime<-TRUE
-for (currsymbol in symbols) {
-    print(c(currsymbol))
-    temp<-tryCatch({
-      temp<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=currsymbol)  
-    }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
-    if (!is.null(temp)) {
-      if (firsttime) {
-        stockDaily<-temp
-      } else {
-        stockDaily<-rbind(stockDaily,temp)}
-      firsttime<-FALSE
-    }
-  }
-
-save(stockDaily,file="stockDailyFundamental.rdata")
+if(file.exists("stockDailyFundamental.rdata")){
+  load("stockDailyFundamental.rdata")
+} else {
+    firsttime<-TRUE
+    for (currsymbol in symbols) {
+        print(c(currsymbol))
+        temp<-tryCatch({
+          temp<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=currsymbol)  
+        }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+        if (!is.null(temp)) {
+          if (firsttime) {
+            stockDaily<-temp
+          } else {
+            stockDaily<-rbind(stockDaily,temp)}
+          firsttime<-FALSE
+        }
+      }
+    
+    save(stockDaily,file="stockDailyFundamental.rdata")
+}
 
 stock <- merge(x=stock,y=stockDaily, by.x=c("symbol","date"), 
                by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
@@ -147,24 +155,29 @@ stock <- merge(x=stock,y=stockDaily, by.x=c("symbol","date"),
 save(stock,file="SPuniverseWithInsiderFundamental.rdata")
 
 load('SPuniverseWithInsiderFundamental.rdata')
-firsttime<-TRUE
-for (currsymbol in symbols) {
-  print(c(currsymbol))
-  temp<-tryCatch({
-    temp<-Quandl.datatable("SHARADAR/ACTIONS", date.gte=fromdate,ticker=currsymbol,action='dividend')  
-  }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
-  if (!is.null(temp)) {
-    if (firsttime) {
-      stockCorporateActions<-temp
-    } else {
-      stockCorporateActions<-rbind(stockCorporateActions,temp)}
-    firsttime<-FALSE
+
+if(file.exists("SPUniverseWithInsiderFundamentalDividend.rdata")){
+  firsttime<-TRUE
+  for (currsymbol in symbols) {
+    print(c(currsymbol))
+    temp<-tryCatch({
+      temp<-Quandl.datatable("SHARADAR/ACTIONS", date.gte=fromdate,ticker=currsymbol,action='dividend')  
+    }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+    if (!is.null(temp)) {
+      if (firsttime) {
+        stockCorporateActions<-temp
+      } else {
+        stockCorporateActions<-rbind(stockCorporateActions,temp)}
+      firsttime<-FALSE
+    }
   }
+  
+  stockCorporateActions <- stockCorporateActions[-c(2,4,6,7)]
+  colnames(stockCorporateActions)[3] <- "dividendValue"
+  stock <- merge(x=stock,y=stockCorporateActions, by.x=c("symbol","date"), 
+                 by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+  
+  save(stock,file="SPUniverseWithInsiderFundamentalDividend.rdata")
+} else {
+  load("SPUniverseWithInsiderFundamentalDividend.rdata")
 }
-
-stockCorporateActions <- stockCorporateActions[-c(2,4,6,7)]
-colnames(stockCorporateActions)[3] <- "dividendValue"
-stock <- merge(x=stock,y=stockCorporateActions, by.x=c("symbol","date"), 
-               by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
-
-save(stock,file="SPUniverseWithInsiderFundamentalDividend.rdata")
