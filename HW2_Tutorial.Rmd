@@ -85,7 +85,7 @@ fromdate=as.Date("2018-02-01")
 if(!file.exists('SPUniverse.rdata')){
   firsttime<-TRUE
   for (currsymbol in symbols) {
-    print(c(currsymbol))
+    #print(c(currsymbol))
     temp<-tryCatch({
       temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker=currsymbol)  
     }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
@@ -139,11 +139,11 @@ STEPS:
 \
 
 ```{r}
-add<-read.csv("SP additions.csv")
-add$date.added<-as.Date(add$date.added,format="%m/%d/%Y")
-temp<-merge(stock,add,all.x=TRUE)
-temp$date.added<-as.Date(ifelse(is.na(temp$date.added),as.Date("2000-12-31"),temp$date.added))
-temp<-subset(temp,temp$date>=temp$date.added)
+#add<-read.csv("SP additions.csv")
+#add$date.added<-as.Date(add$date.added,format="%m/%d/%Y")
+#temp<-merge(stock,add,all.x=TRUE)
+#temp$date.added<-as.Date(ifelse(is.na(temp$date.added),as.Date("2000-12-31"),temp$date.added))
+#temp<-subset(temp,temp$date>=temp$date.added)
 ```
 
 Get rid of data after stock is removed from the S&P 500\
@@ -166,18 +166,18 @@ STEPS:\
 8)  Use sequence command to go from 1 to \# of rows of stock: incrementing by 1 to renumber rows
 
 ```{r}
-remove<-read.csv("SP removals.csv")
-remove$date.removed<-as.Date(remove$date.removed,format="%m/%d/%Y")
-temp<-merge(temp,remove,all.x=TRUE)
-temp$date.removed<-as.Date(ifelse(is.na(temp$date.removed),as.Date("2100-12-31"),temp$date.removed))
-temp<-subset(temp,temp$date<temp$date.removed)
-temp<-temp[order(temp$symbol,temp$date),]
-stock<-temp[,c(1:9)]
-rownames(stock)<-seq(1,nrow(stock),1)
-  save(stock,file="SPUniverse.rdata")
-} else {
-    load('SPUniverse.rdata')
-}
+#remove<-read.csv("SP removals.csv")
+#remove$date.removed<-as.Date(remove$date.removed,format="%m/%d/%Y")
+#temp<-merge(temp,remove,all.x=TRUE)
+#temp$date.removed<-as.Date(ifelse(is.na(temp$date.removed),as.Date("2100-12-31"),temp$date.removed))
+#temp<-subset(temp,temp$date<temp$date.removed)
+#temp<-temp[order(temp$symbol,temp$date),]
+#stock<-temp[,c(1:9)]
+#rownames(stock)<-seq(1,nrow(stock),1)
+  #save(stock,file="SPUniverse.rdata")
+#} else {
+    #load('SPUniverse.rdata')
+#}
 ```
 
 **Problem Statement:**
@@ -240,6 +240,7 @@ symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
 symbols <- unique(symbols)
 fromdate=as.Date("2018-02-01")
 load('SPUniverse.rdata')
+stock
 ```
 
 Extract insider trading information for Equity/Common Stock
@@ -274,7 +275,7 @@ fromdate=as.Date("2018-01-02")
 insiderTradingEQ <- data.frame(matrix(ncol = 5, nrow = 0))
 colnames(insiderTradingEQ) <- c('ticker', 'transactiondate','sharesboughtEQ', 'sharessoldEQ', 'numownersEQ') 
 for (symbol in symbols) {
-  print(symbol)
+  #print(symbol)
   insiderTrading<-Quandl.datatable("SHARADAR/SF2",ticker=symbol,filingdate.gte=fromdate, securityadcode=c('N','NA','ND'),paginate=TRUE)
   insiderTrading<-insiderTrading[!is.na(insiderTrading$transactiondate),]
   
@@ -289,6 +290,7 @@ for (symbol in symbols) {
 }
 save(insiderTradingEQ,file="insiderTradingEQ.rdata")
 }
+insiderTradingEQ
 ```
 
 Extract insider trading information for Restricted Stock Units (RSU)
@@ -323,7 +325,7 @@ fromdate=as.Date("2018-01-02")
 insiderTradingRSU <- data.frame(matrix(ncol = 5, nrow = 0))
 colnames(insiderTradingRSU) <- c('ticker', 'transactiondate','sharesboughtRSU', 'sharessoldRSU', 'numownersRSU')
 for (symbol in symbols) {
-  print(symbol)
+  #print(symbol)
   insiderTrading<-Quandl.datatable("SHARADAR/SF2",ticker=symbol,filingdate.gte=fromdate, securityadcode=c('D','DA','DD'))
   insiderTrading<-insiderTrading[!is.na(insiderTrading$transactiondate),]
   
@@ -338,6 +340,7 @@ for (symbol in symbols) {
 }
   save(insiderTradingRSU,file="insiderTradingRSU.rdata")
 }
+insiderTradingRSU
 ```
 
 Merges values of insiderTradingEQ and insiderTradingRSU onto stock universe by using the merge command.  
@@ -359,6 +362,7 @@ stock <- merge(x=stock,y=insiderTradingRSU, by.x=c("symbol","date"),
                by.y=c("ticker","transactiondate"),all.x=TRUE)
 
 save(stock,file="SPUniverseWithInsider.rdata")
+stock
 ```
 
 **Problem Statement:**
@@ -421,7 +425,7 @@ symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
 symbols <- unique(symbols)
 fromdate=as.Date("2018-02-01")
 load('SPUniverseWithInsider.rdata')
-
+stock
 ```
 
 Use ticker symbols from loaded CSV to retrieve Sharadar/Daily dataset filtered by unique tickers and certain dates
@@ -448,7 +452,7 @@ if(file.exists("stockDailyFundamental.rdata")){
 } else {
     firsttime<-TRUE
     for (currsymbol in symbols) {
-        print(c(currsymbol))
+        #print(c(currsymbol))
         temp<-tryCatch({
           temp<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=currsymbol)  
         }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
@@ -470,6 +474,7 @@ stock <- merge(x=stock,y=stockDaily, by.x=c("symbol","date"),
 save(stock,file="SPuniverseWithInsiderFundamental.rdata")
 
 load('SPuniverseWithInsiderFundamental.rdata')
+stock
 ```
 
 Similarly use ticker symbols to retrieve Sharadar/Actions dataset and extract certain columns and preprocess for merging
@@ -485,10 +490,10 @@ STEPS:
 4.  We rename the 3rd column of the extracted columns using colnames to "dividendValue"
 
 ```{r}
-if(file.exists("SPUniverseWithInsiderFundamentalDividend.rdata")){
+if(!file.exists("SPUniverseWithInsiderFundamentalDividend.rdata")){
   firsttime<-TRUE
   for (currsymbol in symbols) {
-    print(c(currsymbol))
+    #print(c(currsymbol))
     temp<-tryCatch({
       temp<-Quandl.datatable("SHARADAR/ACTIONS", date.gte=fromdate,ticker=currsymbol,action='dividend')  
     }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
@@ -510,25 +515,27 @@ if(file.exists("SPUniverseWithInsiderFundamentalDividend.rdata")){
 } else {
   load("SPUniverseWithInsiderFundamentalDividend.rdata")
 }
+stock
 ```
 
-\
+Finally, we are storing the Fundamentals data for each ticker from 01 Feb 2018 for future use purposes.\
 
 ```{r}
-symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
-symbols <- unique(symbols)
-fromdate=as.Date("2018-02-01")
-load('SPUniverse.rdata')
-
 if(file.exists("fundamental.rdata")){
   load('fundamental.rdata')
 } else {
+  firsttime<-TRUE
   fromdate=as.Date("2018-01-02")
   for (symbol in symbols) {
-    print(symbol)
-    insiderTrading<-Quandl.datatable("SHARADAR/SF1",ticker=symbol,calendardate.gte=fromdate,paginate=TRUE)
-    insiderTrading<-insiderTrading[!is.na(insiderTrading$calendardate),]
+    temp<-Quandl.datatable("SHARADAR/SF1",ticker=symbol,calendardate.gte=fromdate,paginate=TRUE)
+    if (firsttime) {
+      fundamentals<-temp
+    } else {
+      fundamentals<-rbind(fundamentals,temp)}
+    firsttime<-FALSE
   }
-  save(insiderTrading,file="fundamental.rdata")
+  fundamentals<-fundamentals[!is.na(fundamentals$calendardate),]
+  save(fundamentals,file="fundamental.rdata")
 }
+fundamentals
 ```

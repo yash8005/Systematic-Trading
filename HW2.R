@@ -182,22 +182,19 @@ if(!file.exists("SPUniverseWithInsiderFundamentalDividend.rdata")){
   load("SPUniverseWithInsiderFundamentalDividend.rdata")
 }
 
-
-
-
-symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
-symbols <- unique(symbols)
-fromdate=as.Date("2018-02-01")
-load('SPUniverse.rdata')
-
 if(file.exists("fundamental.rdata")){
   load('fundamental.rdata')
 } else {
+  firsttime<-TRUE
   fromdate=as.Date("2018-01-02")
   for (symbol in symbols) {
-    print(symbol)
-    insiderTrading<-Quandl.datatable("SHARADAR/SF1",ticker=symbol,calendardate.gte=fromdate,paginate=TRUE)
-    insiderTrading<-insiderTrading[!is.na(insiderTrading$calendardate),]
+    temp<-Quandl.datatable("SHARADAR/SF1",ticker=symbol,calendardate.gte=fromdate,paginate=TRUE)
+    if (firsttime) {
+      fundamentals<-temp
+    } else {
+      fundamentals<-rbind(fundamentals,temp)}
+    firsttime<-FALSE
   }
-  save(insiderTrading,file="fundamental.rdata")
+  fundamentals<-fundamentals[!is.na(fundamentals$calendardate),]
+  save(fundamentals,file="fundamental.rdata")
 }
