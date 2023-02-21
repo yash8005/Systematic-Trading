@@ -1,0 +1,515 @@
+---
+title: "HW 2 Tutorial"
+output: html_document
+date: "2023-02-21"
+---
+
+## **TUTORIAL : DEALING WITH DATA S&P 500**
+
+**Problem Statement:**
+
+The stock universe itself is made up of the S&P 500 stocks. The universe of stock symbols is provided in the csv file 'SP Tickers.csv" that was provided for dealing with data course module resources. You need to create an historical database, by day and for each stock, that contains the adjusted open, high, low, close, and volume. The date range should cover the last five years as available in the Sharadar Equities Bundles available from Nasdaq Data Link. You should adjust the inclusion dates for each stock so that they conform to the time period that the stock was in the S&P 500. That is, only include pricing data for when a stock is in the S&P 500. Check the csv files "SP Additions.csv" and "SP Removals.csv" to obtain the valid date ranges. What checks are needed to help ensure the integrity/accuracy of the data? What error handling is needed?\
+
+**Expected Learning:**
+
+1.  Importing Data: The data can be imported from various sources, such as CSV, Excel, or databases.
+
+2.  Cleaning Data: Missing values and duplicates can be handled to ensure the data is usable.
+
+3.  Looping and Automation: Using loops and functions to allow the user to create a stock universe
+
+4.  Error Handling: Process in which we deal with unwanted or anomalous errors which may cause abnormal termination of the program during its execution to make sure code is functional
+
+5.  Working with dates: Create a variable that will include a data range that will parse out relevant data from the last 5 years. Include dates that conform to the time period that a stock was a part of the S&P 500 using the SP Additions and Removals files.
+
+**Algorithm:**
+
+1.  Sets working directory, installs packages, and loads data.
+
+2.  Get 5 years of S&P Data through the Quandl API
+
+3.  Get rid of data prior to date stock is added to the S&P 500: Additions
+
+4.  Get rid of data after stock is removed from the S&P 500: Removals
+
+**Code Walkthrough:**
+
+Set working directory, installs packages and loads data.
+
+1.  library(rstudioapi): package to easily access R studio API.
+
+2.  library(Quandl): functions for interacting directly with the Quandl API to offer data in a number of formats usable in R, downloading a zip with all data from a Quandl database, and the ability to search.\
+
+```{r}
+library(rstudioapi)
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+rm(list=ls())
+install.packages(c('Quandl','tidyverse','dplyr'))
+library(Quandl)                      
+Quandl.api_key('EfNYF1EymebW8saMFp5B')  
+```
+
+Get 5 years of S&P Data through the Quandl API
+
+STEPS:
+
+1.  The CSV file of symbols is converted to a vector to loop through all symbols and extract unique values
+
+2.  Unique method returns a vector, data frame or array like x but with duplicate elements/rows removed: returning 715 symbols: because it includes ALL symbols that have ever been a part of S&P 500.
+
+3.  Setting date variable (fromdate) to extract data from the last 5 years.
+
+4.  IF statement set to create a stock universe if it doesn't already exist.
+
+5.  Sets first symbol that is passed through the For Loop as true (firsttime)
+
+6.  For loop iterates through all values of (currsymbol)
+
+7.  Create a data frame named temp for aggregation purposes.
+
+8.  Add a TryCatch error handling: which will make sure that the code won't crash and will continue to proceed and add NULL value.
+
+9.  If statement added within for loop: If loop is running for the first time and is not null; initialize data from stock download and if not, the values will be added to the stock universe.
+
+```{r}
+#For Presentation
+apple<-Quandl.datatable("SHARADAR/SEP", date.gte=as.Date("2018-02-01"),ticker='AAPL') 
+apple
+```
+
+```{r}
+symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
+symbols <- unique(symbols)
+fromdate=as.Date("2018-02-01")
+if(!file.exists('SPUniverse.rdata')){
+  firsttime<-TRUE
+  for (currsymbol in symbols) {
+    print(c(currsymbol))
+    temp<-tryCatch({
+      temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker=currsymbol)  
+    }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+    if (!is.null(temp)) {
+      if (firsttime) {
+        stock<-temp
+      } else {
+        stock<-rbind(stock,temp)}
+      firsttime<-FALSE
+    }
+  }
+
+names(stock)[1]<-"symbol"
+
+add<-read.csv("SP additions.csv")
+add$date.added<-as.Date(add$date.added,format="%m/%d/%Y")
+temp<-merge(stock,add,all.x=TRUE)
+temp$date.added<-as.Date(ifelse(is.na(temp$date.added),as.Date("2000-12-31"),temp$date.added))
+temp<-subset(temp,temp$date>=temp$date.added)
+
+remove<-read.csv("SP removals.csv")
+remove$date.removed<-as.Date(remove$date.removed,format="%m/%d/%Y")
+temp<-merge(temp,remove,all.x=TRUE)
+temp$date.removed<-as.Date(ifelse(is.na(temp$date.removed),as.Date("2100-12-31"),temp$date.removed))
+temp<-subset(temp,temp$date<temp$date.removed)
+temp<-temp[order(temp$symbol,temp$date),]
+stock<-temp[,c(1:9)]
+rownames(stock)<-seq(1,nrow(stock),1)
+  save(stock,file="SPUniverse.rdata")
+} else {
+    load('SPUniverse.rdata')
+}
+stock
+```
+
+Extract data prior to date stock is added to the S&P 500: Additions
+
+STEPS:
+
+\
+1. Transform SP Additions into a data frame
+
+2)  Convert date added column from Chr data type into a date with the format argument.
+
+3)  Use the merge command to add a date added column to the temp data frame.
+
+4)  Update date added column to adjust for date added entries that have missing values using the else command.
+
+5)  Subsets temp data frame to include instances where the date is more recent than the date added to extract data prior to date stock added.
+
+\
+
+```{r}
+add<-read.csv("SP additions.csv")
+add$date.added<-as.Date(add$date.added,format="%m/%d/%Y")
+temp<-merge(stock,add,all.x=TRUE)
+temp$date.added<-as.Date(ifelse(is.na(temp$date.added),as.Date("2000-12-31"),temp$date.added))
+temp<-subset(temp,temp$date>=temp$date.added)
+```
+
+Get rid of data after stock is removed from the S&P 500\
+
+STEPS:\
+1) Transform SP Removals into a data frame
+
+2)  Convert date removed column from Chr data type into a date with the format argument.
+
+3)  Use the merge command to add a date removed column to the temp data frame.
+
+4)  Update date removed column to adjust for date removed entries that have missing values using the else command.
+
+5)  Subsets temp data frame to include instances where the data less recent than the date removed to get rid of data after stock is removed from S&P 500.
+
+6)  Order data based on date per symbol
+
+7)  Moves data from temp data frame to stock data frame: takes temp data from column 1-9 (not including the date added/removed columns)
+
+8)  Use sequence command to go from 1 to \# of rows of stock: incrementing by 1 to renumber rows
+
+```{r}
+remove<-read.csv("SP removals.csv")
+remove$date.removed<-as.Date(remove$date.removed,format="%m/%d/%Y")
+temp<-merge(temp,remove,all.x=TRUE)
+temp$date.removed<-as.Date(ifelse(is.na(temp$date.removed),as.Date("2100-12-31"),temp$date.removed))
+temp<-subset(temp,temp$date<temp$date.removed)
+temp<-temp[order(temp$symbol,temp$date),]
+stock<-temp[,c(1:9)]
+rownames(stock)<-seq(1,nrow(stock),1)
+  save(stock,file="SPUniverse.rdata")
+} else {
+    load('SPUniverse.rdata')
+}
+```
+
+**Problem Statement:**
+
+1\. For each stock and day in your universe of data, add in insider trading from the Sharadar equity bundle.
+
+a\. Note that you can have multiple transactions for a given trading day.
+
+b\. Your dataset should only have observations for each stock and day.
+
+c\. You will need to summarize the raw data in some logical manner that provides meaningful indicators/factors. Think in terms of \# of insiders buying, how much purchased, \# of insiders selling, how much sold, etc. Your tutorial should provide a rationale for how you summarize/transform the data.
+
+**Expected Learning:**
+
+1.  Importing Data: The data can be imported from various sources, such as CSV, Excel, or databases.
+
+2.  Cleaning Data: Missing values and duplicates can be handled to ensure the data is usable.
+
+3.  Looping and Automation: Using loops and functions to allow the user to create a stock universe
+
+4.  Working with dates: Create a variable that will include a data range that will parse out relevant data from the last 5 years.
+
+5.  Insider Trading: Understanding legal insider trading that happens in the stock market on a weekly basis. The SEC requires transactions to be submitted electronically in a timely manner which can be useful in creating a trading strategy with meaningful indicators/factors.
+
+6.  Combining Data from different sources: Using the Quandl.Datatable command to bring in data tables from external sources and filtering for the right data. We are able to use the merge commands to combine different data sets to be more meaningful to the user. 
+
+7.  Calculations: Perform calculations on raw data: Adding transaction shares to sum shares bought and shares sold.\
+
+**Algorithm:**
+
+1.  Set working directory, installs packages and loads data.
+
+2.  Extract insider trading information for Equity/Common Stock
+
+3.  Extract insider trading information for Restricted Stock Units (RSU)
+
+4.  Merges values of insiderTradingEQ and insiderTradingRSU onto stock universe by using the merge command.\
+
+**Code Walkthrough:**
+
+Set working directory, installs packages and loads data.
+
+1.  library(Tidyverse) package: It assists with data import, tidying, manipulation, and data visualization
+
+2.  library(Dplyr) package: providing a consistent set of verbs that help you solve the most common data manipulation challenges: such as select, filter and arrange. 
+
+3.  The CSV file of symbols is converted to a vector to loop through all symbols and extract unique values
+
+4.  Unique method returns a vector, data frame or array like x but with duplicate elements/rows removed: returning 715 symbols: because it includes ALL symbols that have ever been a part of S&P 500.
+
+```{r}
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+library('tidyverse')
+library('dplyr')
+library(Quandl)                      
+Quandl.api_key('EfNYF1EymebW8saMFp5B')  
+
+symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
+symbols <- unique(symbols)
+fromdate=as.Date("2018-02-01")
+load('SPUniverse.rdata')
+```
+
+Extract insider trading information for Equity/Common Stock
+
+STEPS:
+
+1.  IF statement set to extract insider trading data for equity/common stock if it doesn't already exist.
+
+2.  Set fromdate variable to extract information for the last 5 years.
+
+3.  Create a data frame named insiderTradingEQ with 5 columns with the names: ticker, transactiondate, sharesboughtEQ, sharessoldEQ, numownersEQ
+
+4.  For Loop to iterate through all symbols: paginate=TRUE to extend the limit to 1,000,000 rows.
+
+5.  Extracting information from SHARADAR/SF2 datatable and filtering for the valid date range: Anything after 2018-01-02. The securityadcode filters for Equity and Common stock. If a transaction date does not exist; it will not be included in the data frame.
+
+6.  groupedInsiderTrading: Grouping the transactions together by date and symbol.
+
+7.  Meaningful Factors:
+
+    1.  SharesboughtEQ is adding the transaction shares that are above 0 
+
+    2.  SharessoldEQ is adding the the transaction shares that are below 0.
+
+    3.  numOwnersEQ = n_distinct counts the \# of unique names of the symbol.
+
+```{r}
+if(file.exists("insiderTradingEQ.rdata")){
+  load('insiderTradingEQ.rdata')
+} else {
+fromdate=as.Date("2018-01-02")
+insiderTradingEQ <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(insiderTradingEQ) <- c('ticker', 'transactiondate','sharesboughtEQ', 'sharessoldEQ', 'numownersEQ') 
+for (symbol in symbols) {
+  print(symbol)
+  insiderTrading<-Quandl.datatable("SHARADAR/SF2",ticker=symbol,filingdate.gte=fromdate, securityadcode=c('N','NA','ND'),paginate=TRUE)
+  insiderTrading<-insiderTrading[!is.na(insiderTrading$transactiondate),]
+  
+  groupedInsiderTrading <- insiderTrading %>% group_by(transactiondate) %>%
+    summarize(sharesboughtEQ=sum(ifelse(transactionshares > 0, transactionshares, 0)), 
+              sharessoldEQ=sum(ifelse(transactionshares < 0, -transactionshares, 0)), 
+              numownersEQ=n_distinct(ownername))
+  groupedInsiderTrading$ticker <- symbol
+  
+  groupedInsiderTrading <- groupedInsiderTrading[c('ticker', 'transactiondate','sharesboughtEQ', 'sharessoldEQ', 'numownersEQ')]
+  insiderTradingEQ<-rbind(insiderTradingEQ,groupedInsiderTrading)
+}
+save(insiderTradingEQ,file="insiderTradingEQ.rdata")
+
+```
+
+Extract insider trading information for Restricted Stock Units (RSU)
+
+STEPS:
+
+1.  IF statement set to extract insider trading data for RSU if it doesn't already exist.
+
+2.  Set fromdate variable to extract information for the last 5 years.
+
+3.  Create a data frame named insiderTradingRSU with 5 columns with the names: ticker, transactiondate, sharesboughtRSU, sharessoldRSU, numownersRSU.
+
+4.  For Loop to iterate through all symbols: paginate=TRUE to extend the limit to 1,000,000 rows.
+
+5.  Extracting information from SHARADAR/SF2 datatable and filtering for the valid date range: Anything after 2018-01-02. The securityadcode filters for RSU. If a transaction date does not exist; it will not be included in the data frame.
+
+6.  groupedInsiderTrading: Grouping the transactions together by date and symbol.
+
+7.  Meaningful Factors:
+
+    1.  SharesboughtRSU is adding the transaction shares that are above 0 
+
+    2.  SharessoldRSU is adding the the transaction shares that are below 0.
+
+    3.  numOwnersRSU = n_distinct counts the \# of unique names of the symbol.
+
+```{r}
+if(file.exists("insiderTradingRSU.rdata")){
+load('insiderTradingRSU.rdata')
+} else{
+fromdate=as.Date("2018-01-02")
+insiderTradingRSU <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(insiderTradingRSU) <- c('ticker', 'transactiondate','sharesboughtRSU', 'sharessoldRSU', 'numownersRSU')
+for (symbol in symbols) {
+  print(symbol)
+  insiderTrading<-Quandl.datatable("SHARADAR/SF2",ticker=symbol,filingdate.gte=fromdate, securityadcode=c('D','DA','DD'))
+  insiderTrading<-insiderTrading[!is.na(insiderTrading$transactiondate),]
+  
+  groupedInsiderTrading <- insiderTrading %>% group_by(transactiondate) %>%
+    summarize(sharesboughtRSU=sum(ifelse(transactionshares > 0, transactionshares, 0)), 
+              sharessoldRSU=sum(ifelse(transactionshares < 0, -transactionshares, 0)), 
+              numownersRSU=n_distinct(ownername))
+  groupedInsiderTrading$ticker <- symbol
+  
+  groupedInsiderTrading <- groupedInsiderTrading[c('ticker', 'transactiondate','sharesboughtRSU', 'sharessoldRSU', 'numownersRSU')]
+  insiderTradingRSU<-rbind(insiderTradingRSU,groupedInsiderTrading)
+}
+  save(insiderTradingRSU,file="insiderTradingRSU.rdata")
+}
+```
+
+Merges values of insiderTradingEQ and insiderTradingRSU onto stock universe by using the merge command.  
+
+STEPS:
+
+1.  Merge two data frames by common columns or row names, or do other versions of database join operations.
+
+2.  X & y argument: x = stock and y = insiderTradingEQ (specify the data frames, or objects to be coerced to one.)
+
+3.  By.x and by.y specify the columns that are to be merged. "Symbol" in stock data frame merges with "ticker" in insiderTradingEQ data frame. "Date" in stock data frame merges with "transactiondate" in insiderTradingEQ.
+
+4.  Repeat steps 1-3 with insiderTradingRSU data frame. 
+
+```{r}
+stock <- merge(x=stock,y=insiderTradingEQ, by.x=c("symbol","date"), 
+               by.y=c("ticker","transactiondate"),all.x = TRUE, all.y=FALSE)
+stock <- merge(x=stock,y=insiderTradingRSU, by.x=c("symbol","date"), 
+               by.y=c("ticker","transactiondate"),all.x=TRUE)
+
+save(stock,file="SPUniverseWithInsider.rdata")
+```
+
+**Problem Statement:**
+
+For each stock and day, grab some data from any other data set in the Sharadar bundle of data (or elsewhere) and integrate it into your data universe. There is a lot of stuff in Sharadar alone, so think about what may be meaningful and helpful information in terms of making trades.
+
+**a.** One thought is to use the market capitalization (cap) data to calculate out the number of outstanding shares. Then you might use that to calculate out market cap for each day.
+
+**i.** Pricing behavior could be different between small cap, mid cap, and large cap stocks.
+
+**ii.** Be creative, but provide a justification/rationale for what you do, just as you do for the insider trading data.
+
+**iii.** Might require some consideration on how to deal with pricing adjustments going forward. You may need to keep track of the outstanding shares on daily basis.
+
+**b**. Separately, you may find it helpful to download all the fundamental data that you can get your hands on, and store it separately so that it will be available to you at a later date if you think of something useful you can do with it.\
+
+**Expected Learning:**
+
+1.  Importing Data: Data can be imported from sources such as CSVs to extract relevant informations such as ticker symbols
+
+2.  API calls: Using Quandl API to extract data from Sharadar dataset and filter by certain parameters
+
+3.  Merging: Incorporating merge between two datasets based on certain properties
+
+4.  Column extraction: Extract certain columns from a dataset and process it for merging
+
+**Algorithm:**
+
+1.  Set working directory, installs packages and loads data.
+
+2.  Use ticker symbols from loaded CSV to retrieve Sharadar/Daily dataset filtered by unique tickers and certain dates
+
+3.  Similarly use ticker symbols to retrieve Sharadar/Actions dataset and extract certain columns and preprocess for merging
+
+4.  Merge the retrieved and filtered Sharadar/Daily dataset with previous insiderUniverse dataset. Repeat the same with Sharadar/Actions dataset.
+
+**Code Walkthrough:**
+
+Set working directory, installs packages and loads data.
+
+STEPS:
+
+1.  Set the current working directory
+
+2.  Retrieve set of tickers from "SP Tickers.csv" and convert into vector
+
+3.  Using the unique command, we extract a unique set of symbols to delete duplicates
+
+4.  We initialize a date variable fromdate in order to filter records from this particular date
+
+5.  Load the "SPUniverseWithInsider.rdata" file
+
+```{r}
+current_path = rstudioapi::getActiveDocumentContext()$path 
+setwd(dirname(current_path ))
+library(tidyverse,dplyr,Quandl)
+library(Quandl)                      
+Quandl.api_key('EfNYF1EymebW8saMFp5B')
+symbols<-as.vector(read.csv("SP Tickers.csv")[,1])
+symbols <- unique(symbols)
+fromdate=as.Date("2018-02-01")
+load('SPUniverseWithInsider.rdata')
+
+```
+
+Use ticker symbols from loaded CSV to retrieve Sharadar/Daily dataset filtered by unique tickers and certain dates
+
+STEPS:
+
+1.  Initialize a variable firsttime set to TRUE
+
+2.  Incorporate for loop to iterate through the symbol dataset.
+
+3.  Use the Quandl library to extract the "SHARADAR/DAILY" dataset, filtering for dates starting from fromdate and by the ticket currsymbol
+
+4.  Wrap the entire operation with a try catch block for error handling
+
+5.  Use rbind method to bind stockDaily and temp if dataset already fetched
+
+6.  Set firsttime to FALSE
+
+7.  Save the file to "stockDailyFundamental.rdata"
+
+```{r}
+if(file.exists("stockDailyFundamental.rdata")){
+  load("stockDailyFundamental.rdata")
+} else {
+    firsttime<-TRUE
+    for (currsymbol in symbols) {
+        print(c(currsymbol))
+        temp<-tryCatch({
+          temp<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=currsymbol)  
+        }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+        if (!is.null(temp)) {
+          if (firsttime) {
+            stockDaily<-temp
+          } else {
+            stockDaily<-rbind(stockDaily,temp)}
+          firsttime<-FALSE
+        }
+      }
+    
+    save(stockDaily,file="stockDailyFundamental.rdata")
+}
+
+stock <- merge(x=stock,y=stockDaily, by.x=c("symbol","date"), 
+               by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+
+save(stock,file="SPuniverseWithInsiderFundamental.rdata")
+
+load('SPuniverseWithInsiderFundamental.rdata')
+```
+
+Similarly use ticker symbols to retrieve Sharadar/Actions dataset and extract certain columns and preprocess for merging
+
+STEPS:
+
+1.  Load "SPuniverseWithInsiderFundamental.rdata"
+
+2.  Similar to the previous example, we use for loop to retrieve the "SHARADAR/ACTIONS" dataset filtered by fromdate and currsymbol ticker
+
+3.  We extract the 2nd, 4th, 6th and 7th column of the stockCorporateActions dataset using the "-c" syntax
+
+4.  We rename the 3rd column of the extracted columns using colnames to "dividendValue"
+
+```{r}
+if(file.exists("SPUniverseWithInsiderFundamentalDividend.rdata")){
+  firsttime<-TRUE
+  for (currsymbol in symbols) {
+    print(c(currsymbol))
+    temp<-tryCatch({
+      temp<-Quandl.datatable("SHARADAR/ACTIONS", date.gte=fromdate,ticker=currsymbol,action='dividend')  
+    }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+    if (!is.null(temp)) {
+      if (firsttime) {
+        stockCorporateActions<-temp
+      } else {
+        stockCorporateActions<-rbind(stockCorporateActions,temp)}
+      firsttime<-FALSE
+    }
+  }
+  
+  stockCorporateActions <- stockCorporateActions[-c(2,4,6,7)]
+  colnames(stockCorporateActions)[3] <- "dividendValue"
+  stock <- merge(x=stock,y=stockCorporateActions, by.x=c("symbol","date"), 
+                 by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+  
+  save(stock,file="SPUniverseWithInsiderFundamentalDividend.rdata")
+} else {
+  load("SPUniverseWithInsiderFundamentalDividend.rdata")
+}
+```
+
+\
