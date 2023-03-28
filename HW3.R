@@ -19,7 +19,7 @@ library(TTR)
 library(xts)
 load('sectors.rdata')
 #SP Universe has all the data from 2018 to 2023 without Addition or Removal
-load("SPUniverseHW3.rdata") 
+load("SPUniverse.rdata") 
 universe<-stock
 from<-as.Date("2021-01-01")
 to<-as.Date("2022-12-31")
@@ -56,15 +56,13 @@ genIndicators=function(sym,window){
   else{
     return (data.frame());
   }
+  
   stock.xts<-xts(stock[,c(3:7)],stock$date)
- 
-  #stock.xts$predictedclose<-NA
   stock.xts$predictreturn<-NA
   stock.xts$predictrpct<-NA
   stock.xts$tradetype<-NA
   
   for (i in window:(nrow(stock.xts)-1)) {
-
      lm_model<-tryCatch({
 
        MA5 <- mean(stock.xts$close[(i-4):i])
@@ -126,7 +124,6 @@ applyRules=function(day,equity){
       candidates<-candidates[c(1:maxdaytrades),]
       numtrades<-maxdaytrades
   }
-  tradeamount<-min(maxtrade,equity/numtrades)
   if (numtrades>0) {
      candidates$buy<-NA
      candidates$sell<-NA
@@ -175,7 +172,7 @@ portfolioStats=function(trades,preturn,tdays){
        ylab="Portfolio Return",main="Portfolio Results",xaxt = "n", yaxt = "n")
   lines(maxreturn,co=2,lw=2)
   lines(preturn,co=4,lw=2)
-  axis(1, at = seq(0, totaldays, 30))
+  axis(1, at = seq(0, totaldays+60, 30))
   axis(2, at = seq(0.5,max(maxreturn)+0.25, 0.1))
   cumreturn<-cumreturn[totaldays]
   meanreturn<-mean(preturn,na.rm=TRUE)-1
