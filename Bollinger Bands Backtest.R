@@ -13,17 +13,33 @@ options(scipen=999)
 
 # ***************GET DATA AND SET TRADING DATE RANGE ***************************
 
-library(quantmod)                                 
+library(quantmod)
+library(dplyr)
 library(TTR)
-load("universe.rdata")
-from<-as.Date("2016-01-01")
-to<-as.Date("2018-01-01")
-universe<-subset(universe,universe$Sector=="Information Technology"&
-                   universe$date>=from&universe$date<=to)
-symbols<-unique(universe$symbol)
+load("SPuniverseHW3.rdata")
+from<-as.Date("2021-01-01")
+to<-as.Date("2022-12-31")
+load('sectors.rdata')
+universe<-stock
+symbolsUE <- subset(sectors,sectors$sector=='Energy')
+#symbolsUE <- subset(sectors,sectors$sector=='Health Care')
+#symbolsUE <- subset(sectors,sectors$sector=='Information Technology')
+#symbolsUE <- subset(sectors,sectors$sector=='Financials')
+#symbolsUE <- subset(sectors,sectors$sector=='Utilities')
+#symbolsUE <- subset(sectors,sectors$sector=='Real Estate')
+#symbolsUE <- subset(sectors,sectors$sector=='Materials')
+#symbolsUE <- subset(sectors,sectors$sector=='Industrials')
+symbols<- as.vector(symbolsUE$symbol)
+numsymbols<-length(symbols)
+CalcPeriod<-9
+universe<-subset(universe,universe$symbol %in% symbols
+                 &universe$date>=from-(10*CalcPeriod)&universe$date<=to)
+stock<-NULL
 initialequity<-100000                # starting money
-maxtrade<-5000                       # maximum value of any single trade
-maxdaytrades<-8                      # maximum trades in one day
+maxdaytrades<-floor(numsymbols/2)                       # maximum trades in one day
+maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.7)                 # maximum value of any single trade
+LowRSI<-30                          # buy below this value
+HighRSI<-70                           # sell above this value
 
 # ************************************** GENERATE INDICATORS *******************
 # The indicators for the function are simply the output from the BBands function
@@ -33,32 +49,23 @@ maxdaytrades<-8                      # maximum trades in one day
 # ******************************************************************************
 genIndicators=function(sym){
   print(paste('Generating Indicators for symbol: ',sym))
-  stock<-subset(universe,universe$symbol==sym)                # work with one symbol at a time
-  stock.xts<-xts(stock[,c(3:7)],stock$date)                   # convert to xts object 
-  temp.xts<-stock.xts                                         # use a separate lagged time series object    
-  temp.xts$high<-stats::lag(stock.xts$high,n=1)               # to calculate the bollinger bands
-  temp.xts$low<-stats::lag(stock.xts$low)                     # there are two lag functions one in dplyr and one in stats
-  temp.xts$close<-stats::lag(stock.xts$close)
-  bb<-tryCatch({
-    bb<-BBands(HLC(temp.xts), n = 20, maType="SMA", sd = 2)   # sometimes calls to BBands will crash the system   
-  }, warning=function(w) {bb<-NULL }, error=function(e) {bb<-NULL})
-  if (is.null(bb)) {                                          # we won't trade if there are no BBands 
-    stock.xts$dn<-NA
-    stock.xts$mavg<-NA
-    stock.xts$up<-NA
-    stock.xts$range<-NA
-  } else {                                                    # otherwise create the indicators from the bb object
-    stock.xts$dn<-bb$dn                                       # note we consider trading in period t based on the 
-    stock.xts$mavg<-bb$mavg                                   # the band calculations in period t-1 (hence the lag)
-    stock.xts$up<-bb$up
-    stock.xts$range<-bb$up-bb$dn                              # keep track of band range/width as a measure of risk
-  }
-  stock<-data.frame(stock.xts)                                # convert back to dataframe object
-  date<-as.Date(rownames(stock))                              # the rest is as we have seen to finish the dataframe
-  stock<-cbind(date,stock)                                    
-  stock<-cbind(sym,stock)
-  names(stock)[1]<-"symbol"
-  rownames(stock)<-seq(1,nrow(stock),1)                       
+  stock<-subset(universe,universe$symbol==sym)  # work with one symbol at a time
+  if (nrow(stock)>100) {
+    stock.xts<-xts(stock[,c(3:7)],stock$date)                   
+    stock.xts$rsi<-tryCatch({
+      stock.xts$rsi<-RSI(stock.xts$close,n=CalcPeriod)        
+    }, warning=function(w) {rsi<-NULL }, 
+    error=function(e) {rsi<-NULL})
+    macd <- MACD(stock.xts$close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA")
+    stock.xts$macd <- macd[, "macd"]
+    stock.xts$macd.signal <- macd[, "signal"]
+    stock.xts$macd.direction <- ifelse(stock.xts$macd > stock.xts$macd.signal, 1, -1)
+    stock<-data.frame(stock.xts)                                
+    date<-as.Date(rownames(stock))                              
+    stock<-cbind(sym,date,stock)                                    
+    names(stock)[1]<-"symbol"
+    rownames(stock)<-seq(1,nrow(stock),1)                       
+  } else stock<-NULL
   return(stock)
 }
 
@@ -73,17 +80,13 @@ genIndicators=function(sym){
 genSignals=function(sym){
   print(paste('Generating Signals for symbol: ',sym))
   stock<-subset(indicators,indicators$symbol==sym)
-  stock.xts<-xts(stock[,c(3:ncol(stock))],stock$date)
-  stock.xts$cross.upper<-ifelse(stock.xts$close>stock.xts$up,1,0)
-  stock.xts$cross.lower<-ifelse(stock.xts$close<stock.xts$dn,1,0) 
-  stock.xts$cross.trendup<-ifelse(stock.xts$close>stock.xts$mavg,1,0)   
-  stock.xts$cross.trenddn<-ifelse(stock.xts$close<stock.xts$mavg,1,0)   
-  stock<-data.frame(stock.xts)                                      
-  date<-as.Date(rownames(stock))                                 
-  stock<-cbind(date,stock)                                    
-  stock<-cbind(sym,stock)
-  names(stock)[1]<-"symbol"
-  rownames(stock)<-seq(1,nrow(stock),1)                          
+  stock$lagged.rsi<-lag(stock$rsi,1)
+  stock$doublelagged.rsi <- lag(stock$rsi,2)
+  stock$cross.lt.value<-ifelse(stock$lagged.rsi<=LowRSI,1,0)
+  stock$cross.gt.value<-ifelse(stock$lagged.rsi>=HighRSI,1,0)
+  stock$trend.down<-ifelse(stock$doublelagged.rsi < stock$lagged.rsi, 1, 0) # downtrend signal
+  stock$trend.up<-ifelse(stock$doublelagged.rsi > stock$lagged.rsi, 1, 0) # uptrend signal  
+  #stock<-data.frame(stock.xts)                                     
   return(stock)
 }
 
@@ -102,12 +105,12 @@ closePositions=function(day,equity,position){
     longposition<-subset(position,type=="Long")              # check long and short separately
     shortposition<-subset(position,type=="Short")           
     candidates<-subset(signals,signals$date==day&            # check shorts first
-                         (signals$cross.trendup==1))[,c(1,2,6)] # grab symbol (1), date(2), and price (6)
+                         (signals$trend.down==1)&(signals$cross.gt.value==1)&(signals$macd.direction==-1))[,c(1,2,6)] # grab symbol (1), date(2), and price (6)
     names(candidates)[2]<-"closedate"                        # keep track of the close date so we
     names(candidates)[3]<-"outprice"                         # can check how long we hold our positions
     closeshort<-merge(shortposition,candidates,by="symbol")  # Close only if we have a position
     candidates<-subset(signals,signals$date==day&            # Now do the same for longs
-                         (signals$cross.trenddn==1))[,c(1,2,6)]    
+                         (signals$trend.up==1)&(signals$cross.lt.value==1)&(signals$macd.direction==1))[,c(1,2,6)]    
     names(candidates)[2]<-"closedate"
     names(candidates)[3]<-"outprice"
     closelong<-merge(longposition,candidates,by="symbol")
@@ -128,8 +131,8 @@ closePositions=function(day,equity,position){
 # don't already have a position in the stock.  So we have a signal to open, we
 # need to check for the absence of the position in the set of open positions
 # ******************************************************************************
-day<-currdate
-position<-netopen
+#day<-currdate
+#position<-netopen
 openPositions=function(day,equity,position){
   cash=0
   opened<-NULL
@@ -139,7 +142,7 @@ openPositions=function(day,equity,position){
     shortposition<-subset(position,type=="Short")[,c(1,2)]       # for further explanation
     names(shortposition)[2]<-"dummy"
     candidates<-subset(signals,signals$date==day&                # check shorts first  
-                         signals$cross.lower==1)
+                         (signals$trend.down==1)&(signals$cross.gt.value==1)&(signals$macd.direction==-1))
     temp<-merge(candidates,shortposition,by="symbol",all.x=TRUE)
     openshort<-subset(temp,is.na(dummy))                         # only short if we don't have a position
     if (nrow(openshort)>0) {                                      
@@ -147,7 +150,7 @@ openPositions=function(day,equity,position){
       openshort$type<-"Short"                                    # we will open a short position
     } else {openshort<-NULL}                                     # if the dataframe is empty, set it to null
     candidates<-subset(signals,signals$date==day&                # now proceed and do same for longs
-                         signals$cross.upper==1)
+                         (signals$trend.up==1)&(signals$cross.lt.value==1)&(signals$macd.direction==1))
     temp<-merge(candidates,longposition,by="symbol",all.x=TRUE)
     openlong<-subset(temp,is.na(dummy))
     if (nrow(openlong)>0) {
@@ -159,16 +162,27 @@ openPositions=function(day,equity,position){
       if (nrow(opened)==0) opened<-NULL                          # so we don't have to check for both !null
     }                                                            # and that the number of rows>0
   } else {
-    opened<-subset(signals,signals$date==day&                  # no open positions so grab all signals to open
-                     (signals$cross.lower==1|signals$cross.upper==1)) 
+    opened<-signals %>%
+      filter(date == as.Date(day),
+             (trend.down == 1 & cross.gt.value == 1 & macd.direction == -1) |
+               (trend.up == 1 & cross.lt.value == 1 & macd.direction == 1))  # no open positions so grab all signals to open
+    #print('here')
+    #print(opened)
     if (nrow(opened)==0) {opened<-NULL} else {                    
-      opened$type<-ifelse(opened$cross.lower==1,               # set the type of position (long, short)  
-                          "Short","Long")}
+      opened <- opened %>% 
+        mutate(type = ifelse(opened$trend.down == 1 & opened$cross.gt.value == 1 & opened$macd.direction==-1, "Short", "Long"))               # set the type of position (long, short)  
+    }
   }
+  #print(opened)
+  #print('here2')
   if (!is.null(opened)) {                                        # open if we have positions to open
     opened$buyprice<-ifelse(opened$type=="Long",opened$open,NA)
     opened$sellprice<-ifelse(opened$type=="Short",opened$open,NA)
-    opened<-opened[order(opened$range),]                         # sort them by the risk 
+    #opened <- opened %>% 
+      #mutate(buyprice = if_else(if_any(type == "Long"), open, NA),
+             #sellprice = if_else(if_any(type == "Short"), open, NA))
+    #print('here3')
+    opened<-opened[order(-opened$rsi),]                         # sort them by the risk 
     numtrades<-nrow(opened)                                      # we will take the best maxtrades to    
     if (numtrades>maxdaytrades) {                                # open - we will not exceed maxtrades
       opened<-opened[c(1:maxdaytrades),]
@@ -196,8 +210,8 @@ openPositions=function(day,equity,position){
 # positions then open any new positions.  We  won't add to existing positions so
 # we will only open if we don't already have an open position in a stock.  
 # ******************************************************************************
-results<-applyRules(currdate,currentcash,position)    # our state variables are the date and cash available
-equity<-currentcash
+#results<-applyRules(currdate,currentcash,position)    # our state variables are the date and cash available
+#equity<-currentcash
 
 applyRules=function(currdate,equity,position){
   netopen<-position                                        # netopen will hold all open positions after any close orders
@@ -277,7 +291,7 @@ for (sym in symbols) {                         # into a separate dataframe calle
   temp<-genSignals(sym)
   signals<-rbind(signals,temp)
 }
-
+signals<-subset(signals,signals$date>=from&signals$date<=to)
 tdays<-unique(signals$date)                             # Now process (apply rules) for each trading day in
 position<-NULL                                          # order... keeping track of open "positions" and
 closed<-NULL                                            # "closed" positions as we proceed.  
@@ -302,6 +316,3 @@ for (day in 1:length(tdays)) {                          # Now backtest throughou
   
 performance<-portfolioStats(closed,pvalue,tdays) 
 performance
-
-
-

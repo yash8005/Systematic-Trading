@@ -34,7 +34,7 @@ universe<-subset(universe,universe$symbol %in% symbols
 stock<-NULL
 initialequity<-100000                 # starting money
 maxdaytrades<-floor(numsymbols/2)                       # maximum trades in one day
-maxtrade<-((initialequity*0.9)/maxdaytrades)*(1.5)                 # maximum value of any single trade
+maxtrade<-((initialequity*0.9)/maxdaytrades)*(3)                 # maximum value of any single trade
 LowRSI<-22                          # buy below this value
 HighRSI<-78                           # sell above this value
                       # RSI calculation period
@@ -54,7 +54,7 @@ genIndicators=function(symbol){
     macd <- MACD(stock.xts$close, nFast = 12, nSlow = 26, nSig = 9, maType = "EMA")
     stock.xts$macd <- macd[, "macd"]
     stock.xts$macd.signal <- macd[, "signal"]
-    stock.xts$macd.direction <- ifelse(stock.xts$macd > stock.xts$macd.signal, 1, -1)
+    #stock.xts$macd.direction <- ifelse(stock.xts$macd > stock.xts$macd.signal, 1, -1)
     stock<-data.frame(stock.xts)                                
     date<-as.Date(rownames(stock))                              
     stock<-cbind(sym,date,stock)                                    
@@ -71,9 +71,9 @@ genIndicators=function(symbol){
 genSignals=function(sym){
   print(paste('Generating Signals for symbol: ',sym))
   stock<-subset(indicators,indicators$symbol==sym)
-  lagged.rsi<-stats::lag(stock$rsi)
-  stock$cross.lt.value<-ifelse(lagged.rsi<=LowRSI,1,0)
-  stock$cross.gt.value<-ifelse(lagged.rsi>=HighRSI,1,0)
+  stock$lagged.rsi<-stats::lag(stock$rsi)
+  stock$cross.lt.value<-ifelse(stock$lagged.rsi<=LowRSI,1,0)
+  stock$cross.gt.value<-ifelse(stock$lagged.rsi>=HighRSI,1,0)
   return(stock)
 }
 
