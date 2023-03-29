@@ -1,9 +1,7 @@
 # ******************************************************************************
-# Bollinger Bands Strategy -> This is a sometimes in the market strategy so we 
-# will open positions when the price closes above the upper band (long) or below
-# the lower band (short).  We will exit positions when the price crosses the 
-# trend line opposite the trend. Decisions are based on closing prices and are 
-# executed with next period open prices.
+# RSI STRATEGY -> for a set of equities, over a trading period, invest in the 
+# next market open those stocks for which RSI dips below a certain value and 
+# close out all open positions for which  RSI rises above a certain value  
 # **************SET WORKING DIRECTORY AND CLEAR ENVIRONMENT ********************
 library(rstudioapi)
 current_path = rstudioapi::getActiveDocumentContext()$path 
@@ -16,6 +14,8 @@ options(scipen=999)
 library(quantmod)
 library(dplyr)
 library(TTR)
+library(readr)
+library(zoo)
 load("SPuniverseHW3.rdata")
 from<-as.Date("2021-01-01")
 to<-as.Date("2022-12-31")
@@ -31,21 +31,20 @@ symbolsUE <- subset(sectors,sectors$sector=='Energy')
 #symbolsUE <- subset(sectors,sectors$sector=='Industrials')
 symbols<- as.vector(symbolsUE$symbol)
 numsymbols<-length(symbols)
-CalcPeriod<-9
+CalcPeriod<-2
 universe<-subset(universe,universe$symbol %in% symbols
                  &universe$date>=from-(10*CalcPeriod)&universe$date<=to)
 stock<-NULL
 initialequity<-100000                # starting money
 maxdaytrades<-floor(numsymbols/2)                       # maximum trades in one day
-maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.7)                 # maximum value of any single trade
-LowRSI<-30                          # buy below this value
-HighRSI<-70                           # sell above this value
+maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.5)                 # maximum value of any single trade
+LowRSI<-40                          # buy below this value
+HighRSI<-80                           # sell above this value
 
 # ************************************** GENERATE INDICATORS *******************
-# The indicators for the function are simply the output from the BBands function
-# in the TTR library.  Since we are potentially trading on the open based on 
-# prior days indicators, we need to lag the BBands indicators to they are
-# accessible on the day we will trade. 
+# The indicator for this strategy is momentum in RSI and MACD.  We will also build bands around 
+# the momentum by specifying a width that is predicated on the standard 
+# deviation of momentum.  
 # ******************************************************************************
 genIndicators=function(sym){
   print(paste('Generating Indicators for symbol: ',sym))
@@ -70,12 +69,9 @@ genIndicators=function(sym){
 }
 
 # ************************************** GENERATE SIGNALS ***************************************************************
-# Generate signals is a function that will check for any cross overs.  We have
-# a sell short signal if price closes below the lower band.  We have a go long
-# signal if prices closes above the upper band.  For exiting, we can check to
-# see which side of the trend line prices close.  But we will have to check our
-# position (long or short) to see if price crossed the trend line against the
-# trend.  We will do this latter part when we apply rules.
+# For this strategy, we need two signals one for when RSI crosses above the 
+# a threshold value (sell) and when it crosses below a different treshold value
+# (buy) and one for upward trend and downward trend. We have already calculated MACD and its direction.
 # ******************************************************************************
 genSignals=function(sym){
   print(paste('Generating Signals for symbol: ',sym))
@@ -93,8 +89,8 @@ genSignals=function(sym){
 # **************************CLOSE POSITIONS ************************************
 # Here we will check our exit signals and compare them to the list of open
 # positions, separately for longs and shorts.  If we have a short position
-# and price closes above the trend line, then we close it.   If we have a long
-# position and prices closes below the trend line, then we close it.  Note we
+# and RSI is above the lower RSI and -ve MACD direction, then we close it.   If we have a long
+# position and RSI is above higher RSI and +ve MACD direction, then we close it.  Note we
 # will note simultaneously hold long and short positions with this strategy.
 # We will only open if we don't already have an open position in a stock.  
 # ******************************************************************************
@@ -166,22 +162,17 @@ openPositions=function(day,equity,position){
       filter(date == as.Date(day),
              (trend.down == 1 & cross.gt.value == 1 & macd.direction == -1) |
                (trend.up == 1 & cross.lt.value == 1 & macd.direction == 1))  # no open positions so grab all signals to open
-    #print('here')
-    #print(opened)
+
     if (nrow(opened)==0) {opened<-NULL} else {                    
       opened <- opened %>% 
         mutate(type = ifelse(opened$trend.down == 1 & opened$cross.gt.value == 1 & opened$macd.direction==-1, "Short", "Long"))               # set the type of position (long, short)  
     }
   }
-  #print(opened)
-  #print('here2')
+
   if (!is.null(opened)) {                                        # open if we have positions to open
     opened$buyprice<-ifelse(opened$type=="Long",opened$open,NA)
     opened$sellprice<-ifelse(opened$type=="Short",opened$open,NA)
-    #opened <- opened %>% 
-      #mutate(buyprice = if_else(if_any(type == "Long"), open, NA),
-             #sellprice = if_else(if_any(type == "Short"), open, NA))
-    #print('here3')
+
     opened<-opened[order(-opened$rsi),]                         # sort them by the risk 
     numtrades<-nrow(opened)                                      # we will take the best maxtrades to    
     if (numtrades>maxdaytrades) {                                # open - we will not exceed maxtrades
@@ -261,10 +252,14 @@ portfolioStats=function(trades,pvalue,tdays){
     streak<-ifelse(down[i]<0,streak+1,0)
     maxstreak<-ifelse(streak>maxstreak,streak,maxstreak)
   }
-  maxy<-max(cumreturn+0.2)
-  plot(tdays,cumreturn,type="l",col="black",lwd=2,xlab="Time Period",ylim=c(0.5,maxy),ylab="Portfolio Return",main="Portfolio Results")
-  lines(tdays,maxreturn,co=2,lw=2)
-  lines(tdays,preturn,co=4,lw=2)
+  
+  plot(cumreturn,type="l",col="black",lwd=2,xlab="Time Period",ylim=c(min(cumreturn)-0.25,max(maxreturn)+0.25),
+       ylab="Portfolio Return",main="Portfolio Results",xaxt = "n", yaxt = "n")
+  lines(maxreturn,co=2,lw=2)
+  lines(preturn,co=4,lw=2)
+  axis(1, at = seq(0, totaldays+60, 30))
+  axis(2, at = seq(0.5,max(maxreturn)+0.25, 0.1))
+  
   trades$holdperiod<-as.numeric(trades$closedate-trades$date)
   meanhold<-mean(trades$holdperiod,na.rm=TRUE)
   cumreturn<-cumreturn[totaldays]
@@ -272,7 +267,31 @@ portfolioStats=function(trades,pvalue,tdays){
   sharpe<-(meanreturn-1)/sd(preturn,na.rm=TRUE)*sqrt(252)
   maxdraw<-min(down)
   maxdrawpct<-min(downpct)*100
-  performance<-list(totaltrades=totaltrades,longtrades=longtrades,shorttrades=shorttrades,cumreturn=cumreturn,
+  
+  # Compute number of winning long trades, winning percentage, and average return of long trades
+  winlong <- nrow(subset(trades, trades$type == "Long" & trades$profit > 0))
+  winlongpct <- ifelse(longtrades > 0, winlong / longtrades, NA)
+  avglongreturn <- ifelse(longtrades > 0, (trades %>%
+                            filter(type == "Long") %>%
+                            mutate(return = (close - open) / open) %>%
+                            summarise(avg_return = mean(return)) %>% 
+                              pull(avg_return)), NA)
+  
+  # Compute number of winning short trades, winning percentage, and average return of short trades
+  winshort <- nrow(subset(trades, trades$type == "Short" & trades$profit <= 0))
+  winshortpct <- ifelse(shorttrades > 0, winshort / shorttrades, NA)
+  avgshortreturn <- ifelse(shorttrades > 0, (trades %>%
+                                               filter(type == "Short") %>%
+                                               mutate(return = ((close) - (open)) / (open)) %>%
+                                               summarise(avg_return = mean(return))%>% 
+                                               pull(avg_return)), NA)
+  
+  # Compute percentage winning trades
+  wintrades <- nrow(subset(trades, trades$profit > 0))
+  wintradespct <- ifelse(totaltrades > 0, wintrades / totaltrades, NA)
+  performance<-list(totaltrades=totaltrades,longtrades=longtrades,winlong=winlong, winlongpct = winlongpct, avglongreturn = avglongreturn,
+                    shorttrades=shorttrades,winshort=winshort, winshortpct = winshortpct, avgshortreturn=avgshortreturn,
+                    wintrades=wintrades, wintradespct =wintradespct,cumreturn=cumreturn,
                     meanreturn=meanreturn,sharpe=sharpe,maxdraw=maxdraw,maxdrawpct=maxdrawpct,drawlength=maxstreak,
                     meanhold=meanhold)
   return(performance)
