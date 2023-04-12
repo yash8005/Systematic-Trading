@@ -1,7 +1,7 @@
 # ******************************************************************************
-# RSI STRATEGY -> for a set of equities, over a trading period, invest in the 
-# next market open those stocks for which RSI dips below a certain value and 
-# close out all open positions for which  RSI rises above a certain value  
+# RANDOM FOREST STRATEGY -> for a set of equities, over a trading period, long stocks
+# that exceed a certain predicted return threshold and short those that fall below
+# a certain predicted return threshold.
 # **************SET WORKING DIRECTORY AND CLEAR ENVIRONMENT ********************
 library(rstudioapi)
 current_path = rstudioapi::getActiveDocumentContext()$path 
@@ -47,17 +47,23 @@ universe<-subset(universe,universe$date>=days[datastart]&universe$date<=days[dat
 stock<-NULL
 initialequity<-100000                # starting money
 maxdaytrades<-floor(numsymbols/2)                       # maximum trades in one day
-maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.3)                 # maximum value of any single trade
+maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.5)                 # maximum value of any single trade
 defaultscalinglength<-10000
-longthreshold<-1.005
+longthreshold<-1.01
 shortthreshold<-0.985
 trainstart<-datastart+windowsize+longestindicator
 trainend<-dataend-1
 
 # ************************************** GENERATE INDICATORS *******************
-# The indicator for this strategy is momentum in RSI and MACD.  We will also build bands around 
-# the momentum by specifying a width that is predicated on the standard 
-# deviation of momentum.  
+# The indicator for this strategy are many so that we have ideal situation for model training.
+#Rate of Change/Momentum
+#Oscillator
+#Moving Averages
+#RSI
+#Volatility
+#Trend direction/strength 
+#Measure of the money flowing into or out of a security 
+# Stochastic Oscillator / Momentum Index
 # ******************************************************************************
 genIndicators=function(sym){
   print(paste('Generating Indicators for symbol: ',sym))
@@ -268,9 +274,7 @@ genPredictions=function(stock){
 }
 
 # ************************************** GENERATE SIGNALS ***************************************************************
-# For this strategy, we need two signals one for when RSI crosses above the 
-# a threshold value (sell) and when it crosses below a different treshold value
-# (buy) and one for upward trend and downward trend. We have already calculated MACD and its direction.
+# For this strategy, we are using precition from Random Forest model compared with thresholds
 # ******************************************************************************
 genSignals=function(stock){
   stock$short<-ifelse(stock$prediction<shortthreshold,1,0)
@@ -280,10 +284,8 @@ genSignals=function(stock){
 
 # **************************CLOSE POSITIONS ************************************
 # Here we will check our exit signals and compare them to the list of open
-# positions, separately for longs and shorts.  If we have a short position
-# and RSI is above the lower RSI and -ve MACD direction, then we close it.   If we have a long
-# position and RSI is above higher RSI and +ve MACD direction, then we close it.  Note we
-# will note simultaneously hold long and short positions with this strategy.
+# positions, separately for longs and shorts.  
+# Note we will note simultaneously hold long and short positions with this strategy.
 # We will only open if we don't already have an open position in a stock.  
 # ******************************************************************************
 closePositions=function(day,equity,position){
@@ -365,7 +367,16 @@ openPositions=function(day,equity,position){
     opened$buyprice<-ifelse(opened$type=="Long",opened$nextopen,NA)
     opened$sellprice<-ifelse(opened$type=="Short",opened$nextopen,NA)
 
-    #opened<-opened[order(-opened$rsi),]                         # sort them by the risk 
+    #opened<-opened[order(-opened$rsi),]  # sort them by the risk 
+    if (nrow(opened) > maxdaytrades){
+      opened$deviation <- ifelse(opened$prediction > longthreshold, abs(opened$prediction - longthreshold), abs(opened$prediction - shortthreshold))
+      
+      # Sort the dataframe based on deviation in descending order
+      opened <- opened[order(-opened$deviation), ]
+      
+      # Remove the "deviation" column from the dataframe
+      opened <- opened[, -which(colnames(opened) == "deviation")]
+    }
     numtrades<-nrow(opened)                                      # we will take the best maxtrades to    
     if (numtrades>maxdaytrades) {                                # open - we will not exceed maxtrades
       opened<-opened[c(1:maxdaytrades),]
@@ -496,7 +507,7 @@ for (sym in symbols) {                         # indicators into a dataframe nam
   indicators<-rbind(indicators,temp)
 }
     
-signals<-NULL    # signals will be added to indicators and dumped   
+signals<-NULL    
 predictions<-data.frame(genPredictions(indicators))
 
 signals<-data.frame(genSignals(predictions))
@@ -516,7 +527,7 @@ for (day in 1:length(tdays)) {                          # Now backtest throughou
   closed<-rbind(closed,results$close)                   # keep track of all our closed positions
   currentcash<-currentcash+results$cashin-results$cashout  # update our cash position at end of day
   if (!is.null(position)) {                                # update the value of our investments
-    temp<-subset(indicators,indicators$date==currdate)[,c(1,6)]
+    temp<-subset(indicators,indicators$date==currdate)[,c(1,39)]
     names(temp)[2]<-"currprice"
     currpos<-merge(position,temp)
     currpos$value<-currpos$position*currpos$currprice
