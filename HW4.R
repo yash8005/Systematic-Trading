@@ -101,7 +101,7 @@ closePositions=function(day,equity,position){
     longposition<-subset(position,type=="Long")              # check long and short separately
     shortposition<-subset(position,type=="Short")           
     candidates<-subset(signals,signals$date==day&            # check shorts first
-                         (signals$trend.down==1)&(signals$cross.gt.value==1)&(signals$macd.direction==-1))[,c(1,2,6)] # grab symbol (1), date(2), and price (6)
+                         (signals$trend.down==1)&(signals$cross.gt.value==1)&(signals$macd.direction==-1))[,c(1,2,6)] # grab symbol (1), date(2), and nextopen (38)
     names(candidates)[2]<-"closedate"                        # keep track of the close date so we
     names(candidates)[3]<-"outprice"                         # can check how long we hold our positions
     closeshort<-merge(shortposition,candidates,by="symbol")  # Close only if we have a position
@@ -335,3 +335,6 @@ for (day in 1:length(tdays)) {                          # Now backtest throughou
   
 performance<-portfolioStats(closed,pvalue,tdays) 
 performance
+
+
+
