@@ -1,20 +1,18 @@
 # **************************************************************************
 # Production platform for the Random Forest daily trading strategy.  
-# Enter on open of next day and exit on close of next day. Requires 
-# separate sell orders to be entered from either within trader workstation
-# or through another script (to be developed).  This script is not 
-# sophisticated enough to track open/executed orders to place stop outs or 
-# other exits.  Generates trades based on data up until the last complete 
-# end-of-day trading data.  Allows user to review/modify orders and then 
+# Enter on open of next day and exit on open of day where reverse signal predicted
+#Allows user to review/modify orders and then 
 # either quit without trading or execute them through the API.  For the 
 # API to work, the IB Gateway or Trader Workstation must be logged into and 
 # active prior to running this script.
+
+# TO EXECUTE PLEASE USE COMMAND ""source('HW6.R')"" on console.
+# Other run calls can lead to code malfunction.
 
 # *********SET WORKING DIRECTORY AND CLEAR ENVIRONMENT *********************
 library(rstudioapi)
 # Getting the path of your current open file
 current_path = rstudioapi::getActiveDocumentContext()$path 
-#setwd(dirname(current_path ))
 rm(list=ls())
 options("getSymbols.warning4.0"=FALSE) # disables warning message from showing 
 options(scipen=999)
@@ -29,7 +27,7 @@ library(tidyquant)
 windowsize<-15
 longestindicator<-200
 currentdate<-Sys.Date()
-maxdaytrades<-25                       # maximum trades in one day
+maxdaytrades<-15                       # maximum trades in one day - one way (i.e. max 15 short, 15 long)
 maxtradepct<-15               # maximum value of any single trade
 longthreshold<-1.018
 shortthreshold<-0.98
