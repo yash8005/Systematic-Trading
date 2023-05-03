@@ -46,7 +46,7 @@ getData=function(){
   if(!is.null(temp)){
     #symbols<-subset(currentSP500,currentSP500$sector=='Energy')$symbol
     symbols<-currentSP500$symbol
-    for (i in 1:length(symbols)) {
+    for (i in 1:10) {
       print(c(i,symbols[i]))
       temp<-NULL
       temp<-tryCatch({
@@ -248,7 +248,7 @@ genPredictions=function(stock,tradedate){
   train<-subset(stock,stock$date<as.Date(tradedate))
   train<-na.omit(train)
   rf.model=ranger(nextreturn~.-nextopen -nextclose -symbol -date ,data=train, 
-                  mtry=18,num.trees=100)
+                  mtry=18,num.trees=2000)
   rsq<-round(mean(rf.model$r.squared),3)
   print(paste("RSQ:",rsq))
   preds<-subset(stock,stock$date==as.Date(tradedate))    
@@ -331,7 +331,7 @@ applyRules=function(currentPortfolio,day,equity){
   equity<-equity+longs$cashin-longs$cashout-longs$transcost
   candidates<-subset(signals,signals$date==day&signals$short==1)
   candidates$prediction<-2-candidates$prediction
-  shorts<-genTrades(candidates,equity/4)
+  shorts<-genTrades(candidates,equity)
   
   #Remove buy for already long open positon
   currentPortfolioSignals <- currentPortfolioSignals[!(currentPortfolioSignals$long == 1 & currentPortfolioSignals$position > 0), ]
@@ -457,8 +457,8 @@ if (isConnected(twsconn=tws)){
   for(i in c(1:nrow(trades))){ # Enter orders to open positions
     equity<-twsEquity(as.character(trades$symbol[i]),'SMART',primary="ISLAND")
     OrdId<-reqIds(tws)
-    order<-twsOrder(OrdId,action=openAction,totalQuantity = trades$position[i],
-                    orderType="MKT",tif="OPG") 
+    order<-twsOrder(OrdId,action=openAction,totalQuantity = abs(trades$position[i]),
+                    orderType="MKT") 
     placeOrder(tws,equity,order)
     # cancelOrder(tws,OrdId)      
     }
@@ -488,7 +488,7 @@ getPortfolio=function(accountUpdate){
   currentPortfolio <- data.frame(matrix(ncol = 2, nrow = 0))
   for(i in c(1:length(acc[[2]])))
   {
-    trade<-acc[[2]][[i]]
+    trade<-accountUpdate[[2]][[i]]
     sym<-trade[[1]]$symbol
     pos<-trade[[2]]$position
     if(pos!=0){

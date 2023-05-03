@@ -18,8 +18,11 @@ library(readr)
 library(zoo)
 library(robustHD)
 library(ranger)
+library(Quandl)
+library(IBrokers)
+library(tidyquant)
 load("ProjectUniverseData.rdata")
-fromBacktest<-as.Date("2021-01-01")
+fromBacktest<-as.Date("2021-04-01")
 toBacktest<-as.Date("2022-12-31")
 universe<-stock
 currentSP500<-tq_index("SP500")[,c(1,6)]
@@ -37,26 +40,26 @@ universe<-subset(universe,universe$symbol %in% symbols)
 CalcPeriod<-2
 days<-unique(universe$date)
 days<-days[order(days)]
-yearsBacktest<-2
-windowsize<-5                       # rolling training days for random forest
+yearsBacktest<-1.7
+windowsize<-15                       # rolling training days for random forest
 longestindicator<-50
-teststart<-as.Date("2021-01-14")
+teststart<-as.Date("2021-04-01")
 datastart<-which(days==teststart)-windowsize-longestindicator
 dataend<-which(days==teststart)+yearsBacktest*252+1-2
 universe<-subset(universe,universe$date>=days[datastart]&universe$date<=days[dataend])
 stock<-NULL
-initialequity<-100000                # starting money
-maxdaytrades<-floor(numsymbols/2)                       # maximum trades in one day
-maxtrade<-((initialequity*0.9)/maxdaytrades)                 # maximum value of any single trade
+initialequity<-1000000                # starting money
+maxdaytrades<-floor(numsymbols/20)                       # maximum trades in one day
+maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.4)                 # maximum value of any single trade
 defaultscalinglength<-10000
 longthreshold<-1.01
-shortthreshold<-0.985
-entry_longthreshold<-1.015
-entry_shortthreshold<-0.98
-exit_longthreshold<-0.92
-exit_shortthreshold<-1.05
+shortthreshold<-0.99
+entry_longthreshold<-1.01
+entry_shortthreshold<-0.97
+exit_longthreshold<-0.98
+exit_shortthreshold<-1.02
 defaultscalinglength<-10000
-LowRSI<-40                          # buy below this value
+LowRSI<-30                         # buy below this value
 HighRSI<-80      
 trainstart<-datastart+windowsize+longestindicator
 trainend<-dataend-1
@@ -288,7 +291,7 @@ genPredictions=function(stock){
     to<-days[currday-1]
     train<-subset(stock,stock$date>=from&stock$date<=to)[3:ncol(stock)]
     #print(train)
-    rf.model=ranger(nextreturn~.-nextopen -nextclose,data=train, mtry = 18, num.trees = 2000)
+    rf.model=ranger(nextreturn~.-nextopen -nextclose,data=train, mtry = 22, num.trees = 50)
     rsq<-round(mean(rf.model$r.squared),3)
     print(paste("RSQ:",rsq))
     preds<-subset(stock,stock$date==as.Date(days[currday]))    
@@ -304,8 +307,8 @@ genPredictions=function(stock){
 # For this strategy, we are using precition from Random Forest model compared with thresholds
 # ******************************************************************************
 genSignals=function(stock){
-  stock$short_entry<-ifelse((stock$trend.down==1)&(stock$cross.gt.value==1)&(stock$macd.direction==-1)&(stock$prediction<entry_shortthreshold),1,0)
-  stock$short_exit<-ifelse((((stock$trend.up==1)&(stock$cross.lt.value==1)&(stock$macd.direction==1))|(stock$prediction>exit_shortthreshold)),1,0)
+  stock$short_entry<-ifelse((stock$prediction<entry_shortthreshold),1,0)
+  stock$short_exit<-ifelse((stock$prediction>exit_shortthreshold),1,0)
   stock$long_entry<-ifelse((stock$trend.up==1)&(stock$cross.lt.value==1)&(stock$macd.direction==1)&stock$prediction>entry_longthreshold,1,0)
   stock$long_exit<-ifelse((((stock$trend.down==1)&(stock$cross.gt.value==1)&(stock$macd.direction==-1))|(stock$prediction<exit_longthreshold)),1,0)
   return(stock)
@@ -411,7 +414,7 @@ openPositions=function(day,equity,position){
       opened<-opened[c(1:maxdaytrades),]
       numtrades<-maxdaytrades
     }
-    tradeamount<-max(min(maxtrade,equity/numtrades),0)           # invest equally, but not more than we have
+    tradeamount<-max(min(maxtrade,equity/numtrades),0)           
     if (numtrades>0&tradeamount>0) {
       opened$position<-ifelse(opened$type=="Long",               # keep a record of the opening price
                               trunc(tradeamount/opened$nextopen),    # and the size of the position, negative
@@ -550,7 +553,7 @@ pvalue<-rep(0,length(tdays))                            # Each day we will keep 
 currentcash<-initialequity                              # that includes current cash, plus our investments.
 for (day in 1:length(tdays)) {                          # Now backtest throughout the trading period
   currdate<-tdays[day]
-  print(currdate)                                       # simple update to screen on our progress
+  print(currdate)  # simple update to screen on our progress
   results<-applyRules(currdate,currentcash,position)    # our state variables are the date and cash available
   position<-rbind(results$posnetofcloses,results$open)  # open positions - what we didn't close+ new positions
   closed<-rbind(closed,results$close)                   # keep track of all our closed positions

@@ -1,12 +1,12 @@
 # **************************************************************************
-# Production platform for the Random Forest daily trading strategy.  
+# Production platform for the Random Forest and RSI MACD momentum hybrid trading strategy.  
 # Enter on open of next day and exit on open of day where reverse signal predicted
 #Allows user to review/modify orders and then 
 # either quit without trading or execute them through the API.  For the 
 # API to work, the IB Gateway or Trader Workstation must be logged into and 
 # active prior to running this script.
 
-# TO EXECUTE PLEASE USE COMMAND ""source('HW6.R')"" on console.
+# TO EXECUTE PLEASE USE COMMAND ""source('Project.R')"" on console.
 # Other run calls can lead to code malfunction.
 
 # *********SET WORKING DIRECTORY AND CLEAR ENVIRONMENT *********************
@@ -25,17 +25,17 @@ library(quantmod)
 library(dplyr)
 library(tidyquant)
 windowsize<-15
-longestindicator<-1000
+longestindicator<-50
 currentdate<-Sys.Date()
-maxdaytrades<-15                       # maximum trades in one day - one way (i.e. max 15 short, 15 long)
+maxdaytrades<-10                       # maximum trades in one day - one way (i.e. max 15 short, 15 long)
 maxtradepct<-15               # maximum value of any single trade
 entry_longthreshold<-1.01
-entry_shortthreshold<-0.99
-exit_longthreshold<-0.95
-exit_shortthreshold<-1.05
+entry_shortthreshold<-0.97
+exit_longthreshold<-0.98
+exit_shortthreshold<-1.02
 defaultscalinglength<-10000
-LowRSI<-40                          # buy below this value
-HighRSI<-80                           # sell above this value
+LowRSI<-30                         # buy below this value
+HighRSI<-80                       # sell above this value
 currentSP500<-tq_index("SP500")[,c(1,6)]
 IBport=7496 #7496 is the port for tws and 4002 is for the gate
 # ************************* GET DATA FROM FROM STORED UNIVERSE AND IMPORT NEW FROM QUANDL *****************
@@ -201,13 +201,6 @@ genIndicators=function(sym,tradedate){
   
   # Stochastic Oscillator / Momentum Index: ------
   
-  # SMI(HLC, n = 13, nFast = 2, nSlow = 25, nSig = 9, maType, bounded = TRUE, ...): Stochastic Momentum Index
-  #smi<-tryCatch({
-    #smi<-SMI(subset(stock.xts, select = c("high","low", "close")))
-    #stock.xts$smi <- smi[,1]
-    #stock.xts$smi_signal <- smi[,2]
-  #}, warning=function(w) {smi<-NA }, error=function(e) {smi<-NA})
-  
   
   # WPR(HLC, n = 14): William's %R
   stock.xts$wpr<-tryCatch({
@@ -289,7 +282,7 @@ genPredictions=function(stock,tradedate){
   train<-subset(stock,stock$date<as.Date(tradedate))
   train<-na.omit(train)
   rf.model=ranger(nextreturn~.-nextopen -nextclose -symbol -date ,data=train, 
-                  mtry=18,num.trees=2000)
+                  mtry=22,num.trees=2000)
   rsq<-round(mean(rf.model$r.squared),3)
   print(paste("RSQ:",rsq))
   preds<-subset(stock,stock$date==as.Date(tradedate))    
@@ -309,10 +302,11 @@ genPredictions=function(stock,tradedate){
 genSignals=function(stock){
   #browser()
   
-  stock$short_entry<-ifelse((stock$trend.down==1)&(stock$cross.gt.value==1)&(stock$macd.direction==-1)&(stock$prediction<entry_shortthreshold),1,0)
-  stock$short_exit<-ifelse((((stock$trend.up==1)&(stock$cross.lt.value==1)&(stock$macd.direction==1))|(stock$prediction>exit_shortthreshold)),1,0)
+  stock$short_entry<-ifelse((stock$prediction<entry_shortthreshold),1,0)
+  stock$short_exit<-ifelse((stock$prediction>exit_shortthreshold),1,0)
   stock$long_entry<-ifelse((stock$trend.up==1)&(stock$cross.lt.value==1)&(stock$macd.direction==1)&stock$prediction>entry_longthreshold,1,0)
   stock$long_exit<-ifelse((((stock$trend.down==1)&(stock$cross.gt.value==1)&(stock$macd.direction==-1))|(stock$prediction<exit_longthreshold)),1,0)
+  
   stock$price<-stock$lastclose
   stock<-subset(stock,stock$short_entry==1|stock$short_exit==1|stock$long_entry==1|stock$long_exit==1)
   return(list(stock))
@@ -330,10 +324,17 @@ genTrades=function(candidates,equity){
     candidates<-candidates[order(-candidates$prediction),]  # sort them by decreasing predicted returns
     numtrades<-nrow(candidates)  
     if (numtrades>maxdaytrades) { # make sure we don't exceed the # of trades allowed
+        candidates$deviation <- ifelse(candidates$prediction > entry_longthreshold, abs(candidates$prediction - entry_longthreshold), abs(candidates$prediction - entry_shortthreshold))
+        
+        # Sort the dataframe based on deviation in descending order
+        candidates <- candidates[order(-candidates$deviation), ]
+        
+        # Remove the "deviation" column from the dataframe
+        candidates <- candidates[, -which(colnames(candidates) == "deviation")]
       candidates<-candidates[c(1:maxdaytrades),]
       numtrades<-maxdaytrades
     }
-    browser()
+    #browser()
     candidates$tradeAmount<-NA
     candidates$tradeAmount <- min(equity * (candidates$prediction / sum(candidates$prediction)),maxtradepct*equity)
     cashout<-0
@@ -361,7 +362,7 @@ applyRules=function(currentPortfolio,day,equity){
   cashin<-0
   cashout<-0
   transcost<-0
-  browser()
+  #browser()
   currentPortfolio$position <- as.numeric(currentPortfolio$position)
   #Extract Signals for Trades already Open
   currentPortfolioSignals <- signals[signals$symbol %in% currentPortfolio[,1],] 
@@ -409,6 +410,7 @@ applyRules=function(currentPortfolio,day,equity){
 # *************************** REVIEW TRADES ************************************
 reviewTrades=function(trades,tradetype) {
   done<-FALSE
+  reverseTradeType <- ifelse(tradetype=='Long Trades','Short Trades','Long Trades')
   if (nrow(trades)>0){
     if(ncol(trades)==2){
       trades<-trades[,c("symbol","position")]
@@ -427,7 +429,7 @@ reviewTrades=function(trades,tradetype) {
     cat("\014")
     print(paste("REVIEWING CANDIDATE",toupper(tradetype),
                 " AND CHOOSING TO EXECUTE WILL SEND TRADES IMMEDIATELY TO IB."))
-    choice<-readline(prompt="Choose D)elete trade, M)odify Price, C)hange position, E)xecute, Q)uit without trading:  ")
+    choice<-readline(prompt=paste("Choose D)elete trade, M)odify Price, C)hange position, E)xecute, K)ill", reverseTradeType ,"Q)uit without trading:  "))
     choice<-toupper(choice)
     done<-ifelse(choice=="E"|choice=="Q",TRUE,FALSE)
     if (choice=="M"){
@@ -494,6 +496,28 @@ reviewTrades=function(trades,tradetype) {
         Sys.sleep(2)
       }
     }
+    if (choice=="K"){
+      killUpdate<-reqAccountUpdates(tws) 
+      killPortfolio <- getPortfolio(killUpdate)
+      if(reverseTradeType=="Short Trades"){
+        killPortfolio <- killPortfolio[(killPortfolio$position<0),]
+      }
+      else{
+        killPortfolio <- killPortfolio[(killPortfolio$position>0),]
+      }
+      View(killPortfolio)
+      confirm<-as.character(readline(prompt=paste("Enter Y)es to confirm, N)o to abort exiting all", reverseTradeType)))
+      valid<-is.character(confirm)
+      valid<-ifelse(is.na(valid),FALSE,valid)
+        if (valid) {
+          if (toupper(confirm)=="Y") {
+            trades<-bind_rows(trades,killPortfolio)
+          }
+        } else { 
+          print("Invalid entry")  
+          Sys.sleep(2)
+        }
+    }
     }
   if (choice!="E"){
     trades<-trades[-c(1:nrow(trades)),]
@@ -552,6 +576,7 @@ getPortfolio=function(accountUpdate){
     }
   }
   colnames(currentPortfolio) <- c('symbol', 'position')
+  currentPortfolio$position <- as.numeric(currentPortfolio$position)
   return(currentPortfolio)
 }
 # ********************************  RUN STRATEGY **********************************
@@ -594,7 +619,7 @@ if (proceed=="Y"){
   }, warning=function(w) {tws<-NULL }, error=function(e) {tws<-NULL})
   if(!is.null(tws)) {
     acc<-reqAccountUpdates(tws)  
-    available<-max(as.numeric(acc[[1]]$AvailableFunds[1])/10,100000)
+    available<-min(as.numeric(acc[[1]]$AvailableFunds[1])/10,100000)
     currentPortfolio<-getPortfolio(acc)
     trades<-applyRules(currentPortfolio,lasttradedate,available)
     if (!is.null(trades$long)) {

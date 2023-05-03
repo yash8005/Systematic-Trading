@@ -18,20 +18,12 @@ library(readr)
 library(zoo)
 library(robustHD)
 library(ranger)
-load("SPuniverseHW3.rdata")
+load("ProjectUniverse.rdata")
 fromBacktest<-as.Date("2021-01-01")
 toBacktest<-as.Date("2022-12-31")
-load('sectors.rdata')
 universe<-stock
-symbolsUE <- subset(sectors,sectors$sector=='Energy')
-#symbolsUE <- subset(sectors,sectors$sector=='Health Care')
-#symbolsUE <- subset(sectors,sectors$sector=='Information Technology')
-#symbolsUE <- subset(sectors,sectors$sector=='Financials')
-#symbolsUE <- subset(sectors,sectors$sector=='Utilities')
-#symbolsUE <- subset(sectors,sectors$sector=='Real Estate')
-#symbolsUE <- subset(sectors,sectors$sector=='Materials')
-#symbolsUE <- subset(sectors,sectors$sector=='Industrials')
-symbols<- as.vector(symbolsUE$symbol)
+currentSP500<-tq_index("SP500")[,c(1,6)]
+symbols<-currentSP500$symbol
 numsymbols<-length(symbols)
 universe<-subset(universe,universe$symbol %in% symbols)
 CalcPeriod<-2
@@ -51,6 +43,13 @@ maxtrade<-((initialequity*0.9)/maxdaytrades)*(0.5)                 # maximum val
 defaultscalinglength<-10000
 longthreshold<-1.01
 shortthreshold<-0.985
+entry_longthreshold<-1.05
+entry_shortthreshold<-0.993
+exit_longthreshold<-0.95
+exit_shortthreshold<-1.05
+defaultscalinglength<-10000
+LowRSI<-40                          # buy below this value
+HighRSI<-80      
 trainstart<-datastart+windowsize+longestindicator
 trainend<-dataend-1
 
@@ -93,7 +92,11 @@ genIndicators=function(sym){
   }, warning=function(w) {macd<-NULL }, error=function(e) {macd<-NULL})
   if (is.null(macd)) {
     stock.xts$macdDiff<-NA
-  } else stock.xts$macdDiff<-macd[,1]-macd[,2] 
+  } else {
+    stock.xts$macd <- macd[, "macd"]
+    stock.xts$macd.signal <- macd[, "signal"]
+    stock.xts$macd.direction <- ifelse(stock.xts$macd > stock.xts$macd.signal, 1, -1)   
+  }
   
   #Moving Averages
   
@@ -117,7 +120,9 @@ genIndicators=function(sym){
   stock.xts$cross1040<-stock.xts$sma10/stock.xts$sma40  
   
   #RSI 
-  
+  stock.xts$rsi2<-tryCatch({
+    stock.xts$rsi2<-RSI(stock.xts$close,n=2)        
+  }, warning=function(w) {stock.xts$rsi2<-NA }, error=function(e) {stock.xts$rsi2<-NA})
   stock.xts$rsi5<-tryCatch({
     stock.xts$rsi5<-RSI(stock.xts$close,n=5)        
   }, warning=function(w) {stock.xts$rsi5<-NA }, error=function(e) {stock.xts$rsi5<-NA})
@@ -179,11 +184,11 @@ genIndicators=function(sym){
   # Stochastic Oscillator / Momentum Index: ------
  
   # SMI(HLC, n = 13, nFast = 2, nSlow = 25, nSig = 9, maType, bounded = TRUE, ...): Stochastic Momentum Index
-  smi<-tryCatch({
-    smi<-SMI(subset(stock.xts, select = c("high","low", "close")))
-  }, warning=function(w) {smi<-NA }, error=function(e) {smi<-NA})
-  stock.xts$smi <- smi[,1]
-  stock.xts$smi_signal <- smi[,2]
+  #smi<-tryCatch({
+    #smi<-SMI(subset(stock.xts, select = c("high","low", "close")))
+  #}, warning=function(w) {smi<-NA }, error=function(e) {smi<-NA})
+  #stock.xts$smi <- smi[,1]
+  #stock.xts$smi_signal <- smi[,2]
   
   # WPR(HLC, n = 14): William's %R
   stock.xts$wpr<-tryCatch({
@@ -226,6 +231,20 @@ genIndicators=function(sym){
     scaled.xts$rsi5<-stock.xts$rsi5
     scaled.xts$rsi10<-stock.xts$rsi10
     scaled.xts$rsi20<-stock.xts$rsi20
+    
+    #Momentum Strategy Paramters for Technical Analysis Entry Exit Position
+    scaled.xts$macd<-stock.xts$macd 
+    scaled.xts$macd.signal <- stock.xts$macd.signal 
+    scaled.xts$macd.direction <- stock.xts$macd.direction 
+    
+    scaled.xts$rsi2<-stock.xts$rsi2
+    
+    scaled.xts$lagged.rsi2<-lag(scaled.xts$rsi2,1)
+    scaled.xts$doublelagged.rsi2 <- lag(scaled.xts$rsi2,2)
+    scaled.xts$cross.lt.value<-ifelse(scaled.xts$lagged.rsi2<=LowRSI,1,0)
+    scaled.xts$cross.gt.value<-ifelse(scaled.xts$lagged.rsi2>=HighRSI,1,0)
+    scaled.xts$trend.down<-ifelse(scaled.xts$doublelagged.rsi2 < scaled.xts$lagged.rsi2, 1, 0) # downtrend signal
+    scaled.xts$trend.up<-ifelse(scaled.xts$doublelagged.rsi2 > scaled.xts$lagged.rsi2, 1, 0) # uptrend signal  
    
     scaled.xts$nextreturn<-(lead(as.vector(stock.xts$close),1)-lead(as.vector(stock.xts$open),1))/lead(as.vector(stock.xts$open),1)+1
     scaled.xts$nextopen<-lead(as.vector(stock.xts$open),1)
