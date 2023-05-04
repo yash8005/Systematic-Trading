@@ -21,11 +21,50 @@ library(ranger)
 library(Quandl)
 library(IBrokers)
 library(tidyquant)
-load("ProjectUniverseData.rdata")
-fromBacktest<-as.Date("2021-04-01")
-toBacktest<-as.Date("2022-12-31")
-universe<-stock
 currentSP500<-tq_index("SP500")[,c(1,6)]
+if(file.exists('ProjectUniverseData.rdata')){
+  load("ProjectUniverseData.rdata")
+} else {
+  universe<-NULL
+  universe_daily<-NULL
+  #stock_daily_other<-NULL
+  #browser()
+  fromdate<-Sys.Date()-1500
+  Quandl.api_key("EfNYF1EymebW8saMFp5B")
+  temp<-NULL
+  temp<-tryCatch({
+    temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker="AAPL")   # Use tryCatch to handle the error  
+  }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+  if(!is.null(temp)){
+    #symbols<-subset(currentSP500,currentSP500$sector=='Energy')$symbol
+    symbols<-currentSP500$symbol
+    for (i in 1:length(symbols)) {
+      print(c(i,symbols[i]))
+      temp<-NULL
+      temp_daily<-NULL
+      temp_daily_other<-NULL
+      temp<-tryCatch({
+        temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker=symbols[i])   # Use tryCatch to handle the error
+      }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+      temp_daily<-tryCatch({
+        temp_daily<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=symbols[i])  
+      }, warning=function(w) {temp_daily<-NULL }, error=function(e) {temp_daily<-NULL})
+      temp_merge <- merge(x=temp,y=temp_daily, by.x=c("ticker","date"), 
+                          by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+      universe<-rbind(universe,temp_merge)
+      # stock<-merge(stock,)
+    }
+    #browser()
+    universe<-na.omit(universe)
+    names(universe)[1]<-"symbol"
+    universe<-universe[,c(1:7,12:17)]
+    rownames(universe)<-seq(1,nrow(universe),1)
+    save(universe,file="ProjectUniverseData.rdata")
+  }
+}
+fromBacktest<-as.Date("2022-04-01")
+toBacktest<-as.Date("2023-05-03")
+#universe<-stock
 symbols<-currentSP500$symbol
 #symbols<-currentSP500[currentSP500$sector=='Energy',]$symbol
 #symbols<-currentSP500[currentSP500$sector=='Health Care',]$symbol
@@ -37,15 +76,15 @@ symbols<-currentSP500$symbol
 #symbols<-currentSP500[currentSP500$sector=='Industrials',]$symbol
 numsymbols<-length(symbols)
 universe<-subset(universe,universe$symbol %in% symbols)
-CalcPeriod<-2
+CalcPeriod<-0.1
 days<-unique(universe$date)
 days<-days[order(days)]
-yearsBacktest<-1.7
+yearsBacktest<-1
 windowsize<-15                       # rolling training days for random forest
 longestindicator<-50
-teststart<-as.Date("2021-04-01")
+teststart<-as.Date("2022-04-01")
 datastart<-which(days==teststart)-windowsize-longestindicator
-dataend<-which(days==teststart)+yearsBacktest*252+1-2
+dataend<-length(days)
 universe<-subset(universe,universe$date>=days[datastart]&universe$date<=days[dataend])
 stock<-NULL
 initialequity<-1000000                # starting money
@@ -63,6 +102,54 @@ LowRSI<-30                         # buy below this value
 HighRSI<-80      
 trainstart<-datastart+windowsize+longestindicator
 trainend<-dataend-1
+
+
+# ************************* GET DATA FROM FROM STORED UNIVERSE AND IMPORT NEW FROM QUANDL *****************
+getData=function(){
+  stock<-NULL
+  stock_daily<-NULL
+  #stock_daily_other<-NULL
+  #browser()
+  fromdate<-currentdate-2*(longestindicator+windowsize) 
+  Quandl.api_key("EfNYF1EymebW8saMFp5B")
+  temp<-NULL
+  temp<-tryCatch({
+    temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker="AAPL")   # Use tryCatch to handle the error  
+  }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+  if(!is.null(temp)){
+    #symbols<-subset(currentSP500,currentSP500$sector=='Energy')$symbol
+    symbols<-currentSP500$symbol
+    for (i in 1:length(symbols)) {
+      print(c(i,symbols[i]))
+      temp<-NULL
+      temp_daily<-NULL
+      temp_daily_other<-NULL
+      temp<-tryCatch({
+        temp<-Quandl.datatable("SHARADAR/SEP", date.gte=fromdate,ticker=symbols[i])   # Use tryCatch to handle the error
+      }, warning=function(w) {temp<-NULL }, error=function(e) {temp<-NULL})
+      temp_daily<-tryCatch({
+        temp_daily<-Quandl.datatable("SHARADAR/DAILY", date.gte=fromdate,ticker=symbols[i])  
+      }, warning=function(w) {temp_daily<-NULL }, error=function(e) {temp_daily<-NULL})
+      temp_merge <- merge(x=temp,y=temp_daily, by.x=c("ticker","date"), 
+                          by.y=c("ticker","date"),all.x=TRUE,all.y=FALSE)
+      stock<-rbind(stock,temp_merge)
+      # stock<-merge(stock,)
+    }
+    #browser()
+    stock<-na.omit(stock)
+    names(stock)[1]<-"symbol"
+    stock<-stock[,c(1:7,12:17)]
+    rownames(stock)<-seq(1,nrow(stock),1)
+    days<-unique(stock$date)
+    days<-days[order(days)]
+    lastdate<-max(stock$date)
+    datastart<-which(days==lastdate)-windowsize-longestindicator+1
+    stock<-subset(stock,stock$date>=days[datastart])
+    save(stock,file="ProjectUniverse.rdata")
+  }
+  return(stock)  
+}
+
 
 # ************************************** GENERATE INDICATORS *******************
 # The indicator for this strategy are many so that we have ideal situation for model training.
